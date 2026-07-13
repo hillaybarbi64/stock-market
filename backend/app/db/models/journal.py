@@ -26,6 +26,7 @@ class TradeCycle(Base):
     original automatic matching is always preserved in original_matching."""
 
     __tablename__ = "trade_cycles"
+    __table_args__ = (UniqueConstraint("conid", "open_time", name="uq_cycle_conid_open"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     conid: Mapped[int] = mapped_column(ForeignKey("instruments.conid"), index=True)

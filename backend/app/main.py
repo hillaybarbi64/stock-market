@@ -30,6 +30,9 @@ async def lifespan(app: FastAPI):
 
     registry.live_state = LiveStateService(hub, settings.snapshot_interval_min)
     registry.flex_sync = FlexSyncService(settings)
+    from app.services.templates import ensure_builtin_templates
+
+    await ensure_builtin_templates()
     sync_loop_task = None
     if settings.ibkr_gateway_autostart:
         registry.supervisor = GatewaySupervisor(settings, registry.live_state)
