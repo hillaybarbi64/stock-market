@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     ibkr_gateway_port: int = 4001
     ibkr_client_id: int = 17  # arbitrary but stable client id for this app
     ibkr_readonly: bool = True  # hard default; the connection layer refuses False in this build
+    ibkr_gateway_autostart: bool = True  # tests/tools can disable the supervisor
     ibkr_reconnect_max_interval_s: int = 300
 
     # Flex Web Service (historical, read-only by nature)

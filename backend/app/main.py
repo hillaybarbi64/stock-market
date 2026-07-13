@@ -19,8 +19,24 @@ async def lifespan(app: FastAPI):
     configure_logging(settings.log_level, settings.log_format)
     get_engine()
     log.info("startup", app=settings.app_name, version=settings.app_version)
-    # Background services (gateway connection, schedulers) are started here in later phases.
+
+    from app.ibkr.gateway import GatewaySupervisor
+    from app.services import registry
+    from app.services.live_state import LiveStateService
+    from app.ws.hub import hub
+
+    registry.live_state = LiveStateService(hub, settings.snapshot_interval_min)
+    if settings.ibkr_gateway_autostart:
+        registry.supervisor = GatewaySupervisor(settings, registry.live_state)
+        await registry.supervisor.start()
+        log.info("gateway_supervisor_started", readonly=True)
+
     yield
+
+    if registry.supervisor is not None:
+        await registry.supervisor.stop()
+        registry.supervisor = None
+    registry.live_state = None
     await dispose_engine()
     log.info("shutdown")
 
