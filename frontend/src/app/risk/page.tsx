@@ -44,7 +44,7 @@ interface RiskSummary {
 }
 
 export default function RiskPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["risk", "summary"],
     queryFn: () => apiGet<RiskSummary>("/risk/summary"),
     refetchInterval: 60_000,
@@ -52,12 +52,17 @@ export default function RiskPage() {
 
   if (isLoading) return <div className="mx-auto h-60 max-w-6xl animate-pulse rounded-md bg-subtle" />;
 
-  if (!data?.available || !data.exposure) {
+  if (isError || !data?.available || !data.exposure) {
     return (
       <div className="mx-auto max-w-5xl space-y-4">
         <h1 className="text-[17px] font-semibold tracking-tight">סיכונים</h1>
         <Panel>
-          <p className="py-10 text-center text-[12.5px] text-muted">{data?.detail}</p>
+          <p className="py-10 text-center text-[12.5px] text-muted">
+            {isError
+              ? "שגיאה בקבלת נתוני הסיכון מה-Backend."
+              : data?.detail ??
+                "ניתוח הסיכונים דורש נתוני חשבון חיים — חבר את IB Gateway (ראו RUNBOOK)."}
+          </p>
         </Panel>
       </div>
     );

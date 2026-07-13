@@ -93,6 +93,12 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* Financial tables: breathing room between columns, consistent everywhere. */
+table th:not(:last-child),
+table td:not(:last-child) {
+  padding-inline-end: 14px;
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
