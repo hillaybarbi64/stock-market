@@ -3,43 +3,78 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /*
-  Design tokens — a restrained, professional financial UI.
-  One accent color, quiet neutrals, semantic P&L colors used only for values.
+  Design tokens — see docs/UI_SYSTEM.md. A restrained institutional palette:
+  quiet layered neutrals, one accent, semantic P&L colors used only for values.
+  Light = not glaring white; Dark = not pure black. Token NAMES are stable so
+  every existing component keeps working; only the values are refined here.
 */
 :root {
-  --bg: #f7f7f8;
+  /* Light */
+  --bg: #f6f7f9;
   --bg-panel: #ffffff;
-  --bg-subtle: #f0f0f2;
-  --bg-hover: #ebebee;
-  --border: #e2e2e6;
-  --border-strong: #c9c9d0;
-  --fg: #1a1c22;
-  --fg-muted: #5c6070;
-  --fg-faint: #8f93a3;
-  --accent: #2456d6;
+  --bg-subtle: #f0f2f5;
+  --bg-hover: #e9ecf1;
+  --border: #e3e6ec;
+  --border-strong: #cdd2db;
+  --fg: #171a21;
+  --fg-muted: #5a6172;
+  --fg-faint: #8b92a3;
+  --accent: #2f5fd6;
   --accent-fg: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
   --gain: #0f7b4d;
   --loss: #b42331;
   --warn: #9a6a00;
-  --focus: #2456d6;
+  --info: #2f5fd6;
+  --focus: #2f5fd6;
+
+  /* Elevation — subtle, layered, never heavy */
+  --shadow-1: 0 1px 2px rgba(15, 18, 26, 0.04);
+  --shadow-2: 0 2px 8px rgba(15, 18, 26, 0.06), 0 1px 2px rgba(15, 18, 26, 0.04);
+  --shadow-overlay: 0 12px 32px rgba(15, 18, 26, 0.14), 0 2px 8px rgba(15, 18, 26, 0.08);
+
+  /* Categorical chart palette (sectors/currencies). Same entity → same color. */
+  --cat-1: #2f5fd6;
+  --cat-2: #0f9d76;
+  --cat-3: #c98a1e;
+  --cat-4: #8a5fd0;
+  --cat-5: #c96a4d;
+  --cat-6: #3a93b0;
+  --cat-7: #8a9130;
+  --cat-8: #c25f92;
 }
 
 [data-theme="dark"] {
-  --bg: #131419;
-  --bg-panel: #1a1c23;
-  --bg-subtle: #21232c;
-  --bg-hover: #272a34;
-  --border: #2c2f3a;
-  --border-strong: #3d4150;
-  --fg: #e8e9ee;
-  --fg-muted: #a0a4b4;
-  --fg-faint: #6d7182;
-  --accent: #6c93f0;
-  --accent-fg: #10121a;
+  --bg: #101216;
+  --bg-panel: #171a21;
+  --bg-subtle: #1e222b;
+  --bg-hover: #242935;
+  --border: #2a2e39;
+  --border-strong: #3a3f4d;
+  --fg: #e9ebf0;
+  --fg-muted: #9aa0b0;
+  --fg-faint: #6b7180;
+  --accent: #5b8cff;
+  --accent-fg: #0c0e14;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --gain: #3fb884;
   --loss: #e06470;
   --warn: #d9a53d;
-  --focus: #6c93f0;
+  --info: #5b8cff;
+  --focus: #5b8cff;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 10px rgba(0, 0, 0, 0.36), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  --cat-1: #5b8cff;
+  --cat-2: #3fb884;
+  --cat-3: #d9a53d;
+  --cat-4: #a97bd6;
+  --cat-5: #e0846b;
+  --cat-6: #5fb0c9;
+  --cat-7: #b0b64d;
+  --cat-8: #d67ba3;
 }
 
 @theme inline {
@@ -57,11 +92,46 @@
   --color-gain: var(--gain);
   --color-loss: var(--loss);
   --color-warn: var(--warn);
+  --color-info: var(--info);
+  --color-accent-soft: var(--accent-soft);
+  --color-cat-1: var(--cat-1);
+  --color-cat-2: var(--cat-2);
+  --color-cat-3: var(--cat-3);
+  --color-cat-4: var(--cat-4);
+  --color-cat-5: var(--cat-5);
+  --color-cat-6: var(--cat-6);
+  --color-cat-7: var(--cat-7);
+  --color-cat-8: var(--cat-8);
   --font-sans: var(--font-hebrew), var(--font-inter), system-ui, sans-serif;
   --font-num: var(--font-inter), system-ui, sans-serif;
   --radius-sm: 4px;
   --radius-md: 6px;
+  --radius-lg: 8px;
 }
+
+/*
+  ── Type & surface utilities ─────────────────────────────────────────────
+  The scale from UI_SYSTEM.md. Components may use these instead of ad-hoc
+  inline sizes so hierarchy stays consistent across every screen.
+*/
+.t-display { font-size: 27px; font-weight: 600; line-height: 1.1; letter-spacing: -0.015em; }
+.t-h1 { font-size: 18px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
+.t-h2 { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.t-metric { font-size: 16.5px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+.t-body { font-size: 13px; font-weight: 400; line-height: 1.5; }
+.t-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  color: var(--fg-faint);
+}
+.t-label-upper { text-transform: uppercase; }
+.t-help { font-size: 10.5px; font-weight: 400; line-height: 1.4; color: var(--fg-faint); }
+
+.elev-1 { box-shadow: var(--shadow-1); }
+.elev-2 { box-shadow: var(--shadow-2); }
+.elev-overlay { box-shadow: var(--shadow-overlay); }
 
 /*
   ── Motion layer ─────────────────────────────────────────────────────────
