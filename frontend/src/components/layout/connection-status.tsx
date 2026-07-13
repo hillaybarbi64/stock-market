@@ -12,7 +12,7 @@ import { fetchConnection, postReconnect, type GatewayState } from "@/lib/api";
 */
 
 const STATE_LABEL: Record<GatewayState, string> = {
-  connected: "LIVE · READ ONLY · CONNECTED",
+  connected: "LIVE · READ-ONLY",
   connecting: "CONNECTING…",
   disconnected: "DISCONNECTED",
   gateway_down: "GATEWAY DOWN",
@@ -34,43 +34,58 @@ export function ConnectionStatus() {
 
   if (isError || !data) {
     return (
-      <span className="sym flex items-center gap-1.5 text-[11px] font-medium tracking-wide" dir="ltr">
+      <span
+        className="sym inline-flex items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--loss)_34%,transparent)] bg-[color-mix(in_srgb,var(--loss)_12%,transparent)] px-2.5 py-1 text-[10.5px] font-semibold tracking-[0.06em] text-loss"
+        dir="ltr"
+      >
         <Dot tone="loss" /> BACKEND · DOWN
       </span>
     );
   }
 
   const connected = data.state === "connected";
-  const tone = connected ? "gain" : data.state === "connecting" ? "warn" : "loss";
 
-  return (
-    <div className="flex items-center gap-3" dir="ltr">
-      <span className="sym flex items-center gap-1.5 text-[11px] font-medium tracking-wide">
-        <Dot tone={tone} />
-        {STATE_LABEL[data.state]}
-        {connected && data.market_data_type === "delayed" && (
-          <span className="rounded-sm bg-subtle px-1 py-px text-[9.5px] text-warn">DELAYED</span>
+  // Connected → the signature green pill.
+  if (connected) {
+    return (
+      <span
+        className="sym inline-flex items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-accent-soft px-2.5 py-1 text-[10.5px] font-semibold tracking-[0.06em] text-up-bright"
+        dir="ltr"
+      >
+        <Dot tone="gain" />
+        {STATE_LABEL.connected}
+        {data.market_data_type === "delayed" && (
+          <span className="rounded-[4px] border border-[color-mix(in_srgb,var(--warn)_34%,transparent)] px-1 py-px text-[9px] text-warn">
+            DELAYED
+          </span>
         )}
       </span>
+    );
+  }
 
-      {!connected && data.last_update && (
+  const tone = data.state === "connecting" ? "warn" : "loss";
+  return (
+    <div className="flex items-center gap-2.5" dir="ltr">
+      <span className="sym flex items-center gap-1.5 text-[10.5px] font-semibold tracking-[0.06em]">
+        <Dot tone={tone} />
+        {STATE_LABEL[data.state]}
+      </span>
+      {data.last_update && (
         <span className="num text-[10.5px] text-faint" title="זמן העדכון האחרון שהתקבל">
           last: {new Date(data.last_update).toLocaleTimeString("en-GB")}
         </span>
       )}
-      {!connected && data.next_retry_in_s != null && (
+      {data.next_retry_in_s != null && (
         <span className="num text-[10.5px] text-faint">retry {data.next_retry_in_s}s</span>
       )}
-      {!connected && (
-        <button
-          type="button"
-          onClick={() => reconnect.mutate()}
-          disabled={reconnect.isPending}
-          className="press rounded-sm border border-line px-2 py-0.5 text-[10.5px] text-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
-        >
-          Reconnect
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => reconnect.mutate()}
+        disabled={reconnect.isPending}
+        className="press rounded-md border border-line px-2 py-0.5 text-[10.5px] text-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+      >
+        Reconnect
+      </button>
     </div>
   );
 }

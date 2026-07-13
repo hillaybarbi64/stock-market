@@ -3,78 +3,89 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /*
-  Design tokens — see docs/UI_SYSTEM.md. A restrained institutional palette:
-  quiet layered neutrals, one accent, semantic P&L colors used only for values.
-  Light = not glaring white; Dark = not pure black. Token NAMES are stable so
-  every existing component keeps working; only the values are refined here.
+  Design tokens — see docs/UI_SYSTEM.md. "Legend" language: a near-black data
+  terminal with a vivid green accent (green is both the brand AND the semantic
+  gain color), glossy elevated widgets and a subtle green glow. Token NAMES are
+  stable so every existing component keeps working; values are the refresh.
+  Dark is the primary target; Light mirrors it in a clean, readable variant.
 */
 :root {
-  /* Light */
-  --bg: #f6f7f9;
+  /* Light — clean, readable, same green brand */
+  --bg: #f5f7f9;
   --bg-panel: #ffffff;
-  --bg-subtle: #f0f2f5;
-  --bg-hover: #e9ecf1;
-  --border: #e3e6ec;
-  --border-strong: #cdd2db;
-  --fg: #171a21;
-  --fg-muted: #5a6172;
-  --fg-faint: #8b92a3;
-  --accent: #2f5fd6;
+  --bg-subtle: #eef1f4;
+  --bg-hover: #e5eaef;
+  --border: #e2e6ec;
+  --border-strong: #ccd2db;
+  --fg: #0d1117;
+  --fg-muted: #57606a;
+  --fg-faint: #838b98;
+  --accent: #05a05f;
   --accent-fg: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-  --gain: #0f7b4d;
-  --loss: #b42331;
+  --gain: #07884a;
+  --loss: #d33241;
   --warn: #9a6a00;
   --info: #2f5fd6;
-  --focus: #2f5fd6;
+  --focus: #05a05f;
+
+  /* semantic brights + glow (used by candles, glows, hover accents) */
+  --up-bright: #0aa866;
+  --down-bright: #d33241;
+  --glow: rgba(5, 160, 95, 0.24);
 
   /* Elevation — subtle, layered, never heavy */
-  --shadow-1: 0 1px 2px rgba(15, 18, 26, 0.04);
-  --shadow-2: 0 2px 8px rgba(15, 18, 26, 0.06), 0 1px 2px rgba(15, 18, 26, 0.04);
-  --shadow-overlay: 0 12px 32px rgba(15, 18, 26, 0.14), 0 2px 8px rgba(15, 18, 26, 0.08);
+  --shadow-1: 0 1px 2px rgba(15, 18, 26, 0.05);
+  --shadow-2: 0 2px 10px rgba(15, 18, 26, 0.07), 0 1px 2px rgba(15, 18, 26, 0.05);
+  --shadow-overlay: 0 16px 40px rgba(15, 18, 26, 0.16), 0 2px 8px rgba(15, 18, 26, 0.08);
 
   /* Categorical chart palette (sectors/currencies). Same entity → same color. */
-  --cat-1: #2f5fd6;
-  --cat-2: #0f9d76;
+  --cat-1: #05a05f;
+  --cat-2: #2f5fd6;
   --cat-3: #c98a1e;
   --cat-4: #8a5fd0;
   --cat-5: #c96a4d;
-  --cat-6: #3a93b0;
+  --cat-6: #2e9aab;
   --cat-7: #8a9130;
   --cat-8: #c25f92;
 }
 
 [data-theme="dark"] {
-  --bg: #101216;
-  --bg-panel: #171a21;
-  --bg-subtle: #1e222b;
-  --bg-hover: #242935;
-  --border: #2a2e39;
-  --border-strong: #3a3f4d;
-  --fg: #e9ebf0;
-  --fg-muted: #9aa0b0;
-  --fg-faint: #6b7180;
-  --accent: #5b8cff;
-  --accent-fg: #0c0e14;
-  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
-  --gain: #3fb884;
-  --loss: #e06470;
-  --warn: #d9a53d;
-  --info: #5b8cff;
-  --focus: #5b8cff;
+  --bg: #08090b;
+  --bg-panel: #111318;
+  --bg-subtle: #171a20;
+  --bg-hover: #1e222b;
+  --border: #1e2129;
+  --border-strong: #2a2f3a;
+  --fg: #eef1f6;
+  --fg-muted: #8b93a1;
+  --fg-faint: #565d69;
+  --accent: #00d47e;
+  --accent-fg: #04120c;
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  --gain: #00d47e;
+  --loss: #ff4d5e;
+  --warn: #e7b24a;
+  --info: #4c9ffe;
+  --focus: #00d47e;
 
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-2: 0 2px 10px rgba(0, 0, 0, 0.36), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --up-bright: #3df0a0;
+  --down-bright: #ff7885;
+  --glow: rgba(0, 212, 126, 0.45);
 
-  --cat-1: #5b8cff;
-  --cat-2: #3fb884;
-  --cat-3: #d9a53d;
+  /* glossy widget elevation: inset top highlight + soft dark drop */
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 26px rgba(0, 0, 0, 0.34);
+  --shadow-overlay: 0 20px 48px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  --cat-1: #00d47e;
+  --cat-2: #4c9ffe;
+  --cat-3: #e7b24a;
   --cat-4: #a97bd6;
-  --cat-5: #e0846b;
-  --cat-6: #5fb0c9;
-  --cat-7: #b0b64d;
-  --cat-8: #d67ba3;
+  --cat-5: #ff7a66;
+  --cat-6: #4fd0c9;
+  --cat-7: #b6c24d;
+  --cat-8: #ff7fb0;
 }
 
 @theme inline {
@@ -94,6 +105,8 @@
   --color-warn: var(--warn);
   --color-info: var(--info);
   --color-accent-soft: var(--accent-soft);
+  --color-up-bright: var(--up-bright);
+  --color-down-bright: var(--down-bright);
   --color-cat-1: var(--cat-1);
   --color-cat-2: var(--cat-2);
   --color-cat-3: var(--cat-3);
@@ -107,6 +120,7 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+  --radius-xl: 11px;
 }
 
 /*
@@ -129,9 +143,75 @@
 .t-label-upper { text-transform: uppercase; }
 .t-help { font-size: 10.5px; font-weight: 400; line-height: 1.4; color: var(--fg-faint); }
 
+.t-hero { font-size: 34px; font-weight: 600; line-height: 1; letter-spacing: -0.025em; }
+
 .elev-1 { box-shadow: var(--shadow-1); }
 .elev-2 { box-shadow: var(--shadow-2); }
 .elev-overlay { box-shadow: var(--shadow-overlay); }
+
+/*
+  ── Widget language (Legend) ─────────────────────────────────────────────
+  Every panel is a "widget": a glossy elevated card with a header that carries
+  a drag-handle affordance and a leading green tick. These utilities keep the
+  chrome identical across the whole app.
+*/
+.widget {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.widget-head {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
+}
+/* Drag-handle affordance — a 2-col dot grid, RTL-neutral. */
+.grip {
+  width: 9px;
+  height: 13px;
+  flex: none;
+  background-image: radial-gradient(var(--fg-faint) 42%, transparent 44%);
+  background-size: 4.5px 4.5px;
+  opacity: 0.4;
+}
+/* Leading green tick before a widget title. */
+.wtick {
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--accent);
+  flex: none;
+  box-shadow: 0 0 8px var(--glow);
+}
+/* A soft chip/tag used in widget headers and toolbars. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-subtle);
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--fg-faint);
+}
+.tag--live { color: var(--up-bright); border-color: color-mix(in srgb, var(--accent) 34%, transparent); background: var(--accent-soft); }
+.tag--warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 34%, transparent); }
+/* Green glow for chart lines / live dots (canvas glow uses filter). */
+.glow-accent { filter: drop-shadow(0 0 3px var(--glow)); }
 
 /*
   ── Motion layer ─────────────────────────────────────────────────────────

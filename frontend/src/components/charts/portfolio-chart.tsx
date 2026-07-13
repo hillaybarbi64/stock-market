@@ -54,10 +54,21 @@ export function PortfolioChart({
           : points.map((p) => +(p.drawdown * 100).toFixed(4));
 
     const color = mode === "drawdown" ? t.loss : t.accent;
+    const areaColor = {
+      type: "linear" as const,
+      x: 0,
+      y: 0,
+      x2: 0,
+      y2: 1,
+      colorStops: [
+        { offset: 0, color: mode === "drawdown" ? t.lossDim : t.accentSoft },
+        { offset: 1, color: "rgba(0,0,0,0)" },
+      ],
+    };
 
     return {
       backgroundColor: "transparent",
-      grid: { left: 8, right: 12, top: 14, bottom: 44, containLabel: true },
+      grid: { left: 8, right: 52, top: 16, bottom: 46, containLabel: true },
       tooltip: {
         trigger: "axis",
         backgroundColor: t.panel,
@@ -90,11 +101,20 @@ export function PortfolioChart({
         { type: "inside", throttle: 60 },
         {
           type: "slider",
-          height: 16,
+          height: 15,
           bottom: 8,
-          borderColor: t.line,
+          right: 52,
+          left: "left",
+          borderColor: "transparent",
+          backgroundColor: "transparent",
           fillerColor: t.accentSoft,
-          handleStyle: { color: t.accent },
+          dataBackground: { lineStyle: { color: t.line }, areaStyle: { color: "transparent" } },
+          selectedDataBackground: {
+            lineStyle: { color: t.accent, opacity: 0.6 },
+            areaStyle: { color: t.accentSoft, opacity: 0.35 },
+          },
+          handleStyle: { color: t.accent, borderColor: t.accent },
+          moveHandleStyle: { color: t.accent },
           textStyle: { color: t.faint, fontSize: 9 },
         },
       ],
@@ -104,8 +124,23 @@ export function PortfolioChart({
           data: series,
           showSymbol: false,
           smooth: false,
-          lineStyle: { width: 2, color },
-          areaStyle: { color, opacity: mode === "drawdown" ? 0.12 : 0.07 },
+          lineStyle: {
+            width: 2.2,
+            color,
+            shadowBlur: 8,
+            shadowColor: mode === "drawdown" ? t.lossDim : t.accentSoft,
+          },
+          areaStyle: { color: areaColor },
+          endLabel: {
+            show: true,
+            color: t.accent,
+            fontSize: 11,
+            fontWeight: 600,
+            formatter: (p: { value: number }) =>
+              mode === "nav"
+                ? Number(p.value).toLocaleString("en-US", { maximumFractionDigits: 0 })
+                : `${Number(p.value).toFixed(2)}%`,
+          },
           markPoint: {
             symbol: "circle",
             symbolSize: 1,

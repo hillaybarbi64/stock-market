@@ -70,7 +70,7 @@ export default function InsightsPage() {
       ) : (
         <div className="space-y-3">
           {data.insights.map((i) => (
-            <div key={i.id} className="rounded-md border border-line bg-panel p-4">
+            <div key={i.id} className="widget p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <span

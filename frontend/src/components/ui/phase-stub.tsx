@@ -13,7 +13,7 @@ export function PhaseStub({
 }) {
   return (
     <div className="mx-auto mt-16 max-w-md">
-      <div className="rounded-md border border-line bg-panel p-6">
+      <div className="widget p-6">
         <h1 className="text-[15px] font-semibold">{title}</h1>
         <p className="mt-1 text-[12.5px] text-muted">
           העמוד ייבנה בשלב {phase} של תוכנית העבודה. הוא יכלול:

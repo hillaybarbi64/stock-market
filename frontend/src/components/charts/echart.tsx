@@ -74,38 +74,55 @@ function withAnimation(option: EChartsOption): EChartsOption {
 }
 
 const CAT_FALLBACK = [
-  "#5b8cff", "#3fb884", "#d9a53d", "#a97bd6",
-  "#e0846b", "#5fb0c9", "#b0b64d", "#d67ba3",
+  "#00d47e", "#4c9ffe", "#e7b24a", "#a97bd6",
+  "#ff7a66", "#4fd0c9", "#b6c24d", "#ff7fb0",
 ];
+
+/** Turn a #rrggbb into an rgba() string with the given alpha (for canvas fills
+    that can't parse color-mix). Falls back to the input if it's not hex. */
+function rgba(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
 
 /** Read the current values of our design tokens for chart styling. */
 export function chartTokens() {
   if (typeof window === "undefined") {
     return {
-      fg: "#a0a4b4",
-      faint: "#6d7182",
-      line: "#2c2f3a",
-      accent: "#6c93f0",
-      accentSoft: "rgba(108,147,240,0.16)",
-      gain: "#3fb884",
-      loss: "#e06470",
-      warn: "#d9a53d",
-      panel: "#1a1c23",
+      fg: "#8b93a1",
+      faint: "#565d69",
+      line: "#1e2129",
+      accent: "#00d47e",
+      accentSoft: "rgba(0,212,126,0.15)",
+      gain: "#00d47e",
+      gainDim: "rgba(0,212,126,0.22)",
+      loss: "#ff4d5e",
+      lossDim: "rgba(255,77,94,0.22)",
+      warn: "#e7b24a",
+      info: "#4c9ffe",
+      panel: "#111318",
       cat: CAT_FALLBACK,
     };
   }
   const css = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+  const gain = v("--gain", "#00d47e");
+  const loss = v("--loss", "#ff4d5e");
   return {
-    fg: v("--fg-muted", "#a0a4b4"),
-    faint: v("--fg-faint", "#6d7182"),
-    line: v("--border", "#2c2f3a"),
-    accent: v("--accent", "#6c93f0"),
-    accentSoft: v("--accent-soft", "rgba(108,147,240,0.16)"),
-    gain: v("--gain", "#3fb884"),
-    loss: v("--loss", "#e06470"),
-    warn: v("--warn", "#d9a53d"),
-    panel: v("--bg-panel", "#1a1c23"),
+    fg: v("--fg-muted", "#8b93a1"),
+    faint: v("--fg-faint", "#565d69"),
+    line: v("--border", "#1e2129"),
+    accent: v("--accent", "#00d47e"),
+    accentSoft: v("--accent-soft", "rgba(0,212,126,0.15)"),
+    gain,
+    gainDim: rgba(gain, 0.22),
+    loss,
+    lossDim: rgba(loss, 0.22),
+    warn: v("--warn", "#e7b24a"),
+    info: v("--info", "#4c9ffe"),
+    panel: v("--bg-panel", "#111318"),
     cat: CAT_FALLBACK.map((fb, i) => v(`--cat-${i + 1}`, fb)),
   };
 }

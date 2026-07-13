@@ -48,7 +48,7 @@ export function JournalEntryForm({ cycle, onClose }: { cycle: CycleRow; onClose:
   if (existing.isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="rounded-md border border-line bg-panel px-6 py-4 text-[12.5px] text-muted">
+        <div className="widget px-6 py-4 text-[12.5px] text-muted">
           טוען רשומה…
         </div>
       </div>

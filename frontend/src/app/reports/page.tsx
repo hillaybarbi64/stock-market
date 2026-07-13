@@ -115,7 +115,7 @@ export default function ReportsPage() {
           <p className="py-10 text-center text-[12.5px] text-muted">{r?.detail ?? "בחר טווח תאריכים"}</p>
         </Panel>
       ) : (
-        <div className="rounded-md border border-line bg-panel p-6 print:border-0">
+        <div className="widget p-6 print:border-0 print:shadow-none">
           <header className="border-b border-line pb-4">
             <h2 className="text-[16px] font-semibold">דוח תקופתי</h2>
             <p className="num mt-0.5 text-[12px] text-muted">{r.from} → {r.to}</p>
