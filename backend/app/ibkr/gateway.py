@@ -123,6 +123,45 @@ class GatewaySupervisor:
         self.info.reconnect_attempts = 0
         self._retry_now.set()
 
+    async def fetch_daily_bars(self, conid: int, duration: str = "6 M") -> list[dict]:
+        """Read-only historical daily bars for one instrument. Returns a plain
+        list of {date, open, high, low, close, volume} dicts (empty if the
+        gateway is down or the contract can't be resolved). Historical data is
+        a read request — consistent with the read-only guarantee."""
+        ib = self._ib
+        if ib is None or not ib.isConnected():
+            return []
+        try:
+            contracts = await ib.qualifyContractsAsync(Contract(conId=conid))
+            if not contracts:
+                return []
+            bars = await ib.reqHistoricalDataAsync(
+                contracts[0],
+                endDateTime="",
+                durationStr=duration,
+                barSizeSetting="1 day",
+                whatToShow="TRADES",
+                useRTH=True,
+                formatDate=1,
+            )
+        except Exception as exc:  # pacing violation, no permission, etc.
+            log.warning("historical_bars_failed", conid=conid, error=str(exc))
+            return []
+        out: list[dict] = []
+        for b in bars or []:
+            d = b.date
+            out.append(
+                {
+                    "date": d.isoformat() if hasattr(d, "isoformat") else str(d),
+                    "open": float(b.open),
+                    "high": float(b.high),
+                    "low": float(b.low),
+                    "close": float(b.close),
+                    "volume": float(b.volume) if b.volume is not None else None,
+                }
+            )
+        return out
+
     async def _run(self) -> None:
         attempt = 0
         while not self._stopped.is_set():

@@ -51,3 +51,23 @@ class BenchmarkPrice(Base):
     adj_close: Mapped[Decimal | None] = mapped_column(Numeric(20, 6))
     currency: Mapped[str] = mapped_column(String(8), default="USD")
     source: Mapped[str] = mapped_column(String(16), default="gateway")
+
+
+class InstrumentBar(Base):
+    """Daily OHLCV bar for an instrument, used for the candlestick / sparkline
+    charts. Cached from IBKR historical data (a read-only request) so the UI
+    renders without hammering the gateway. One row per (conid, day)."""
+
+    __tablename__ = "instrument_bars"
+    __table_args__ = (UniqueConstraint("conid", "bar_date", name="uq_bar_conid_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conid: Mapped[int] = mapped_column(index=True)
+    bar_date: Mapped[date] = mapped_column(Date, index=True)
+    open: Mapped[Decimal] = mapped_column(Numeric(20, 6))
+    high: Mapped[Decimal] = mapped_column(Numeric(20, 6))
+    low: Mapped[Decimal] = mapped_column(Numeric(20, 6))
+    close: Mapped[Decimal] = mapped_column(Numeric(20, 6))
+    volume: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    source: Mapped[str] = mapped_column(String(16), default="gateway")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

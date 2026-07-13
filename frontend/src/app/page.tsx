@@ -7,6 +7,7 @@ import {
   type ChartMode,
   type CurvePoint,
 } from "@/components/charts/portfolio-chart";
+import { CandlestickChart, type Bar } from "@/components/charts/candlestick-chart";
 import { PositionsTable } from "@/components/positions/positions-table";
 import { Num, Sym } from "@/components/ui/num";
 import { Panel } from "@/components/ui/panel";
@@ -26,6 +27,11 @@ interface PerfSummary {
     mtd: number | null;
     ytd: number | null;
   };
+}
+
+interface BarsResponse {
+  available: boolean;
+  series: Record<string, { symbol: string; name: string | null; bars: Bar[] }>;
 }
 
 const CHART_MODES = [
@@ -86,6 +92,11 @@ export default function OverviewPage() {
     queryFn: () => apiGet<{ available: boolean; points: CurvePoint[] }>("/performance/equity-curve"),
     refetchInterval: 120_000,
   });
+  const bars = useQuery({
+    queryKey: ["positions", "bars"],
+    queryFn: () => apiGet<BarsResponse>("/positions/bars?days=180"),
+    refetchInterval: 300_000,
+  });
   const [mode, setMode] = useState<ChartMode>("nav");
   const [range, setRange] = useState<Range>("ALL");
 
@@ -126,6 +137,22 @@ export default function OverviewPage() {
         .sort((x, y) => Number(y.market_value ?? 0) - Number(x.market_value ?? 0))[0],
     [posRows],
   );
+
+  // conid → recent closes, for the positions-table sparklines.
+  const sparklines = useMemo(() => {
+    const map: Record<number, number[]> = {};
+    const series = bars.data?.series;
+    if (series) {
+      for (const [conid, s] of Object.entries(series)) {
+        if (s.bars.length > 1) map[Number(conid)] = s.bars.slice(-30).map((b) => b.close);
+      }
+    }
+    return map;
+  }, [bars.data]);
+
+  const topBars = topHolding
+    ? bars.data?.series?.[String(topHolding.instrument.conid)]?.bars ?? []
+    : [];
 
   if (summary.isLoading) {
     return (
@@ -293,23 +320,40 @@ export default function OverviewPage() {
           ) : null
         }
       >
-        <div className="flex h-[300px] flex-col items-center justify-center gap-3 text-center">
-          <CandleGlyph />
-          <div>
-            <p className="text-[13px] font-medium text-muted">גרף נרות (Candlesticks) עם ממוצעים נעים ונפח</p>
-            <p className="mx-auto mt-1 max-w-sm text-[11.5px] text-faint">
-              יתווסף מיד לאחר סנכרון היסטוריית המחירים מ־IBKR. עד אז מוצגים כאן נתוני הפוזיציה בזמן אמת.
-            </p>
-          </div>
-          {topHolding && (
-            <div className="mt-1 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[12px]">
-              <MiniStat label="כמות" value={topHolding.quantity} kind="qty" />
-              <MiniStat label="מחיר ממוצע" value={topHolding.avg_cost} kind="price" />
-              <MiniStat label="שווי שוק" value={topHolding.market_value} ccy={ccy} />
-              <MiniStat label="לא ממומש" value={topHolding.unrealized_pnl} signed />
+        {topBars.length > 1 ? (
+          <>
+            <CandlestickChart bars={topBars} height={300} currency={ccy} />
+            <div className="flex flex-wrap gap-x-6 gap-y-1 px-1 pt-1">
+              <span className="t-help flex items-center gap-1.5">
+                <i className="inline-block h-0.5 w-3 rounded-full" style={{ background: "var(--warn)" }} /> MA7
+              </span>
+              <span className="t-help flex items-center gap-1.5">
+                <i className="inline-block h-0.5 w-3 rounded-full" style={{ background: "var(--info)" }} /> MA25
+              </span>
+              <span className="t-help">· נרות יומיים (TRADES) · מקור IBKR</span>
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <div className="flex h-[300px] flex-col items-center justify-center gap-3 text-center">
+            <CandleGlyph />
+            <div>
+              <p className="text-[13px] font-medium text-muted">גרף נרות (Candlesticks) עם ממוצעים נעים ונפח</p>
+              <p className="mx-auto mt-1 max-w-sm text-[11.5px] text-faint">
+                {bars.isLoading
+                  ? "טוען היסטוריית מחירים…"
+                  : "יתווסף מיד לאחר סנכרון היסטוריית המחירים מ־IBKR (נדרש חיבור Gateway פעיל)."}
+              </p>
+            </div>
+            {topHolding && (
+              <div className="mt-1 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[12px]">
+                <MiniStat label="כמות" value={topHolding.quantity} kind="qty" />
+                <MiniStat label="מחיר ממוצע" value={topHolding.avg_cost} kind="price" />
+                <MiniStat label="שווי שוק" value={topHolding.market_value} ccy={ccy} />
+                <MiniStat label="לא ממומש" value={topHolding.unrealized_pnl} signed />
+              </div>
+            )}
+          </div>
+        )}
       </Panel>
 
       {/* ── RIGHT COL 2: margin & FX + news ───────────────────────── */}
@@ -365,6 +409,7 @@ export default function OverviewPage() {
         <PositionsTable
           positions={posRows}
           nlv={a.net_liquidation ? Number(a.net_liquidation) : null}
+          sparklines={sparklines}
         />
       </Panel>
     </div>

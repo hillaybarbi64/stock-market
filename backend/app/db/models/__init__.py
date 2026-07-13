@@ -10,7 +10,7 @@ from app.db.models.journal import (
     Tag,
     TradeCycle,
 )
-from app.db.models.market import BenchmarkPrice, FxRate, Instrument
+from app.db.models.market import BenchmarkPrice, FxRate, Instrument, InstrumentBar
 from app.db.models.system import (
     AlertEvent,
     AlertRule,
@@ -38,6 +38,7 @@ __all__ = [
     "FxRate",
     "Insight",
     "Instrument",
+    "InstrumentBar",
     "JournalEntry",
     "JournalTemplate",
     "Order",

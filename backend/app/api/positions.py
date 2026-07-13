@@ -11,10 +11,23 @@ from app.db.base import get_db
 from app.db.models import Instrument, Position
 from app.ibkr.types import GatewayState
 from app.services import registry
+from app.services.bars import get_or_refresh_bars
 from app.services.live_state import _clean
 
 router = APIRouter()
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+
+async def _open_instruments(db: AsyncSession) -> list[tuple[int, str, str | None]]:
+    """(conid, symbol, name) for every open position (tradable secs only)."""
+    rows = (
+        await db.execute(
+            select(Instrument.conid, Instrument.symbol, Instrument.name)
+            .join(Position, Position.conid == Instrument.conid)
+            .where(Position.is_open.is_(True), Instrument.sec_type != "CASH")
+        )
+    ).all()
+    return [(c, s, n) for c, s, n in rows]
 
 
 @router.get("")
@@ -61,3 +74,31 @@ async def list_positions(db: DbSession) -> dict:
             for p, i in rows
         ],
     }
+
+
+@router.get("/bars")
+async def positions_bars(db: DbSession, days: int = 180) -> dict:
+    """Daily OHLCV series for every open position — drives the dashboard
+    candlestick and the positions sparklines. Served from cache; refreshed
+    from the gateway (read-only) when stale."""
+    instruments = await _open_instruments(db)
+    conids = [c for c, _, _ in instruments]
+    series = await get_or_refresh_bars(db, conids, days=days)
+    labels = {c: (s, n) for c, s, n in instruments}
+    out = {
+        str(conid): {
+            "symbol": labels[conid][0],
+            "name": labels[conid][1],
+            "bars": bars,
+        }
+        for conid, bars in series.items()
+    }
+    return {"available": any(v["bars"] for v in out.values()), "series": out}
+
+
+@router.get("/{conid}/bars")
+async def instrument_bars(conid: int, db: DbSession, days: int = 180) -> dict:
+    """Daily OHLCV series for a single instrument (asset page candlestick)."""
+    series = await get_or_refresh_bars(db, [conid], days=days)
+    bars = series.get(conid, [])
+    return {"available": bool(bars), "conid": conid, "bars": bars}
