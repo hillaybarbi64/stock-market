@@ -1,0 +1,49 @@
+name: ibkr-dashboard
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ibkr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ibkr_dashboard}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ibkr} -d ${POSTGRES_DB:-ibkr_dashboard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      # Inside docker, reach the host-run IB Gateway via the Docker host alias.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ibkr}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ibkr_dashboard}
+      IBKR_GATEWAY_HOST: ${IBKR_GATEWAY_HOST:-host.docker.internal}
+      API_HOST: 0.0.0.0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  appdata:

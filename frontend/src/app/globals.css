@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+  Design tokens — a restrained, professional financial UI.
+  One accent color, quiet neutrals, semantic P&L colors used only for values.
+*/
+:root {
+  --bg: #f7f7f8;
+  --bg-panel: #ffffff;
+  --bg-subtle: #f0f0f2;
+  --bg-hover: #ebebee;
+  --border: #e2e2e6;
+  --border-strong: #c9c9d0;
+  --fg: #1a1c22;
+  --fg-muted: #5c6070;
+  --fg-faint: #8f93a3;
+  --accent: #2456d6;
+  --accent-fg: #ffffff;
+  --gain: #0f7b4d;
+  --loss: #b42331;
+  --warn: #9a6a00;
+  --focus: #2456d6;
+}
+
+[data-theme="dark"] {
+  --bg: #131419;
+  --bg-panel: #1a1c23;
+  --bg-subtle: #21232c;
+  --bg-hover: #272a34;
+  --border: #2c2f3a;
+  --border-strong: #3d4150;
+  --fg: #e8e9ee;
+  --fg-muted: #a0a4b4;
+  --fg-faint: #6d7182;
+  --accent: #6c93f0;
+  --accent-fg: #10121a;
+  --gain: #3fb884;
+  --loss: #e06470;
+  --warn: #d9a53d;
+  --focus: #6c93f0;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--bg-panel);
+  --color-subtle: var(--bg-subtle);
+  --color-hover: var(--bg-hover);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-hebrew), var(--font-inter), system-ui, sans-serif;
+  --font-num: var(--font-inter), system-ui, sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+}
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Financial figures: always LTR, always tabular so columns align. */
+.num {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Tickers / code fragments inside RTL text. */
+.sym {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: var(--font-num);
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
