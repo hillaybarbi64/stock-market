@@ -66,13 +66,13 @@ export default function TradesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="space-y-3">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-[17px] font-semibold tracking-tight">עסקאות</h1>
-        {data && <span className="num text-[11px] text-faint">{data.total} ביצועים</span>}
+        <h1 className="t-h1">עסקאות</h1>
+        {data && <span className="num text-[11px] text-faint" dir="ltr">{data.total} executions</span>}
       </div>
 
-      <Panel>
+      <Panel title="סינון" subtitle="Filter">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="סימול">
             <input
@@ -118,7 +118,7 @@ export default function TradesPage() {
         </div>
       </Panel>
 
-      <Panel>
+      <Panel title="בלוטר עסקאות" subtitle="Trade Blotter">
         {isLoading ? (
           <div className="h-40 rounded-sm skeleton" />
         ) : !data?.trades.length ? (
@@ -132,7 +132,7 @@ export default function TradesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead>
-                <tr className="text-[10.5px] text-faint">
+                <tr className="t-label border-b border-line">
                   <th className="pb-1.5 text-start font-normal">זמן</th>
                   <th className="pb-1.5 text-start font-normal">נכס</th>
                   <th className="pb-1.5 text-start font-normal">צד</th>
@@ -149,7 +149,7 @@ export default function TradesPage() {
               <tbody>
                 {data.trades.map((t) => (
                   <tr key={t.exec_id} className="border-t border-line hover:bg-hover">
-                    <td className="num py-1.5 text-[11.5px]">
+                    <td className="num whitespace-nowrap py-1.5 text-end text-[11.5px] text-faint">
                       {new Date(t.trade_time).toLocaleString("he-IL", {
                         dateStyle: "short",
                         timeStyle: "short",
@@ -157,7 +157,14 @@ export default function TradesPage() {
                     </td>
                     <td className="py-1.5"><Sym>{t.symbol}</Sym></td>
                     <td className="py-1.5">
-                      <span className={`sym text-[10.5px] font-medium ${t.side === "BUY" ? "text-gain" : "text-loss"}`}>
+                      <span
+                        dir="ltr"
+                        className={`inline-flex rounded-[4px] px-1.5 py-px text-[9.5px] font-semibold ${
+                          t.side === "BUY"
+                            ? "bg-accent-soft text-up-bright"
+                            : "bg-[color-mix(in_srgb,var(--loss)_14%,transparent)] text-down-bright"
+                        }`}
+                      >
                         {t.side}
                       </span>
                     </td>
