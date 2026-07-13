@@ -1,0 +1,36 @@
+# Secrets & local config — never commit
+.env
+.env.*
+!.env.example
+
+# Data, backups, uploads — never commit
+data/
+backups/
+*.dump
+*.sql.gz
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+.eslintcache
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.log
