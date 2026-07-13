@@ -32,7 +32,7 @@ export function EChart({
 
     const mo = new MutationObserver(() => {
       // theme change → caller passes CSS-var-derived colors, so just refresh
-      chart.setOption(option, { notMerge: false });
+      chart.setOption(withAnimation(option), { notMerge: false });
     });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
@@ -46,10 +46,31 @@ export function EChart({
   }, []);
 
   useEffect(() => {
-    chartRef.current?.setOption(option, { notMerge: true });
+    chartRef.current?.setOption(withAnimation(option), { notMerge: true });
   }, [option]);
 
   return <div ref={ref} style={{ height }} dir="ltr" />;
+}
+
+/*
+  Calm native draw aligned to our motion scale: 480ms first paint (2x --dur-slow,
+  justified for a first paint), 240ms tweened updates (= --dur-slow), cubicOut to
+  match the --ease decelerate feel. This is the one motion the CSS reduced-motion
+  floor cannot reach (canvas/JS), so we gate it on matchMedia and disable tweening
+  entirely under reduced motion.
+*/
+function withAnimation(option: EChartsOption): EChartsOption {
+  const reduced =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return {
+    ...option,
+    animation: !reduced,
+    animationDuration: 480,
+    animationEasing: "cubicOut",
+    animationDurationUpdate: 240,
+    animationEasingUpdate: "cubicOut",
+  };
 }
 
 /** Read the current values of our design tokens for chart styling. */

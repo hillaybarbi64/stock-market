@@ -25,7 +25,7 @@ export default function SystemPage() {
 
       <Panel title="חיבור IBKR">
         {!c ? (
-          <div className="h-24 animate-pulse rounded-sm bg-subtle" />
+          <div className="h-24 rounded-sm skeleton" />
         ) : (
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-3">
             <Item label="מצב" value={<span className="sym">{c.state.toUpperCase()}</span>} />

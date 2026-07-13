@@ -66,7 +66,7 @@ export function ConnectionStatus() {
           type="button"
           onClick={() => reconnect.mutate()}
           disabled={reconnect.isPending}
-          className="rounded-sm border border-line px-2 py-0.5 text-[10.5px] text-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
+          className="press rounded-sm border border-line px-2 py-0.5 text-[10.5px] text-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-50"
         >
           Reconnect
         </button>
@@ -76,6 +76,12 @@ export function ConnectionStatus() {
 }
 
 function Dot({ tone }: { tone: "gain" | "loss" | "warn" }) {
-  const cls = tone === "gain" ? "bg-gain" : tone === "warn" ? "bg-warn" : "bg-loss";
+  // gain (live) → breathing ring; warn (connecting) → blink; loss → steady solid.
+  const cls =
+    tone === "gain"
+      ? "bg-gain live-dot"
+      : tone === "warn"
+        ? "bg-warn live-connecting"
+        : "bg-loss";
   return <span aria-hidden className={`inline-block size-1.5 rounded-full ${cls}`} />;
 }

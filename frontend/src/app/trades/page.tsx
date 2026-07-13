@@ -120,7 +120,7 @@ export default function TradesPage() {
 
       <Panel>
         {isLoading ? (
-          <div className="h-40 animate-pulse rounded-sm bg-subtle" />
+          <div className="h-40 rounded-sm skeleton" />
         ) : !data?.trades.length ? (
           <div className="py-10 text-center">
             <p className="text-[13.5px] font-medium">אין עסקאות להצגה</p>

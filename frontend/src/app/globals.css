@@ -63,9 +63,186 @@
   --radius-md: 6px;
 }
 
+/*
+  ── Motion layer ─────────────────────────────────────────────────────────
+  One motion language. Every motion is triggered by a real state change
+  (a WS tick, a connection transition, a mount). Calm deceleration, no
+  overshoot, no bounce, no gradients-in-motion. Tokens below are the single
+  source of truth; the reduced-motion floor neutralizes everything at once.
+*/
+:root {
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 240ms;
+  --dur-flash: 640ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --flash-gain: color-mix(in srgb, var(--gain) 16%, transparent);
+  --flash-loss: color-mix(in srgb, var(--loss) 16%, transparent);
+}
+
+[data-theme="dark"] {
+  --flash-gain: color-mix(in srgb, var(--gain) 22%, transparent);
+  --flash-loss: color-mix(in srgb, var(--loss) 22%, transparent);
+}
+
+/* Live value tick-flash: directional background wash, zero layout shift. */
+.num.tick {
+  border-radius: 3px;
+  padding-inline: 3px;
+  margin-inline: -3px;
+}
+.num.tick[data-dir="up"] {
+  --flash: var(--flash-gain);
+}
+.num.tick[data-dir="down"] {
+  --flash: var(--flash-loss);
+}
+.num.tick.is-flashing {
+  animation: tick-flash var(--dur-flash) var(--ease) both;
+}
+@keyframes tick-flash {
+  from {
+    background-color: var(--flash);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+/* Staggered panel reveal: a settle, not a slide. */
+.panel-reveal {
+  animation: panel-reveal var(--dur-slow) var(--ease) both;
+  animation-delay: calc(min(var(--reveal-i, 0), 5) * 40ms);
+}
+@keyframes panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Connection dot: the one intentional loop — dies the instant the feed drops. */
+.live-dot {
+  position: relative;
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--gain);
+  animation: live-breath 2.4s var(--ease) infinite;
+}
+@keyframes live-breath {
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.live-connecting {
+  animation: blink 1.4s var(--ease) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Sidebar active-item accent bar (leading logical edge, RTL-safe). */
+.nav-item {
+  position: relative;
+}
+.nav-item::before {
+  content: "";
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--dur-base) var(--ease);
+}
+.nav-item--active::before {
+  transform: scaleY(1);
+}
+
+/* Interactive press: 1px travel, no scale (avoids subpixel text blur).
+   Includes the color properties so it never clobbers a button's hover fade. */
+.press {
+  transition:
+    transform var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+.press:active {
+  transform: translateY(1px);
+}
+
+/* Refined skeleton sheen — a distinct motion language from a live tick. */
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--bg-subtle) 30%,
+    var(--bg-hover) 50%,
+    var(--bg-subtle) 70%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-sheen 1.5s var(--ease) infinite;
+}
+@keyframes skeleton-sheen {
+  from {
+    background-position: 220% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* Reduced-motion floor: neutralize every keyframe/transition at once. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .live-dot::after {
+    display: none !important;
+  }
+  .skeleton {
+    animation: none !important;
+    background: var(--bg-subtle) !important;
+  }
+}
+
 html {
   background: var(--bg);
   color: var(--fg);
+}
+
+/* Theme crossfade: scoped to the root surfaces only (never *). */
+html,
+body {
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 body {

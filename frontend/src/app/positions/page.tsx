@@ -31,7 +31,7 @@ export default function PositionsPage() {
       </div>
       <Panel>
         {positions.isLoading ? (
-          <div className="h-32 animate-pulse rounded-sm bg-subtle" />
+          <div className="h-32 rounded-sm skeleton" />
         ) : (
           <PositionsTable positions={positions.data?.positions ?? []} nlv={nlv} />
         )}

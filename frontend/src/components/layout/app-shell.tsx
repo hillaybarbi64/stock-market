@@ -40,9 +40,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-sm px-3 py-1.5 text-[13px] transition-colors ${
+                className={`nav-item rounded-sm px-3 py-1.5 text-[13px] transition-colors ${
                   active
-                    ? "bg-subtle font-medium text-fg"
+                    ? "nav-item--active bg-subtle font-medium text-fg"
                     : "text-muted hover:bg-hover hover:text-fg"
                 }`}
               >

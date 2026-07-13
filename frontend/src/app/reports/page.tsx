@@ -109,7 +109,7 @@ export default function ReportsPage() {
       </Panel>
 
       {report.isLoading ? (
-        <div className="h-60 animate-pulse rounded-md bg-subtle" />
+        <div className="h-60 rounded-md skeleton" />
       ) : !r?.available ? (
         <Panel>
           <p className="py-10 text-center text-[12.5px] text-muted">{r?.detail ?? "בחר טווח תאריכים"}</p>

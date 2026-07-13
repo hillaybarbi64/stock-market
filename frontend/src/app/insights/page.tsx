@@ -56,7 +56,7 @@ export default function InsightsPage() {
       </p>
 
       {isLoading ? (
-        <div className="h-40 animate-pulse rounded-md bg-subtle" />
+        <div className="h-40 rounded-md skeleton" />
       ) : !data?.insights.length ? (
         <Panel>
           <div className="py-10 text-center">

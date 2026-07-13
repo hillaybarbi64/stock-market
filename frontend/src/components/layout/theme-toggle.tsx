@@ -16,7 +16,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={() => setTheme(dark ? "light" : "dark")}
-      className="rounded-sm border border-line px-2.5 py-1 text-[11.5px] text-muted transition-colors hover:bg-hover hover:text-fg"
+      className="press rounded-sm border border-line px-2.5 py-1 text-[11.5px] text-muted hover:bg-hover hover:text-fg"
     >
       {dark ? "מצב בהיר" : "מצב כהה"}
     </button>

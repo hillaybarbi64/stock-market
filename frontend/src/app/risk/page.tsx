@@ -50,7 +50,7 @@ export default function RiskPage() {
     refetchInterval: 60_000,
   });
 
-  if (isLoading) return <div className="mx-auto h-60 max-w-6xl animate-pulse rounded-md bg-subtle" />;
+  if (isLoading) return <div className="mx-auto h-60 max-w-6xl rounded-md skeleton" />;
 
   if (isError || !data?.available || !data.exposure) {
     return (

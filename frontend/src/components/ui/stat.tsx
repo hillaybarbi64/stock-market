@@ -10,6 +10,7 @@ export function Stat({
   currency,
   signed,
   asPct,
+  flash,
   sub,
   title,
 }: {
@@ -18,6 +19,7 @@ export function Stat({
   currency?: string;
   signed?: boolean;
   asPct?: boolean;
+  flash?: boolean;
   sub?: React.ReactNode;
   title?: string;
 }) {
@@ -25,7 +27,7 @@ export function Stat({
     <div className="min-w-0" title={title}>
       <div className="truncate text-[11px] text-faint">{label}</div>
       <div className="mt-0.5 text-[17px] font-semibold leading-tight">
-        <Num value={value} currency={currency} signed={signed} asPct={asPct} />
+        <Num value={value} currency={currency} signed={signed} asPct={asPct} flash={flash} />
       </div>
       {sub ? <div className="mt-0.5 text-[10.5px] text-faint">{sub}</div> : null}
     </div>

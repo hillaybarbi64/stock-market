@@ -1,9 +1,14 @@
+"use client";
+
 /*
   Financial value display primitives.
 
   <Num> renders a number LTR with tabular digits inside RTL text.
   Sign coloring is opt-in (signed) — we do not paint everything green/red.
+  Liveness is opt-in (flash) — a directional wash on WebSocket-driven ticks.
 */
+
+import { useTickFlash } from "@/lib/use-tick-flash";
 
 const nf = (opts: Intl.NumberFormatOptions) => new Intl.NumberFormat("en-US", opts);
 
@@ -22,15 +27,30 @@ export interface NumProps {
   asPct?: boolean;
   /** color by sign and render explicit + for gains */
   signed?: boolean;
+  /** flash a directional wash (green up / red down) when the value ticks */
+  flash?: boolean;
   className?: string;
 }
 
-export function Num({ value, kind = "money", currency, asPct, signed, className = "" }: NumProps) {
-  if (value === null || value === undefined || value === "") {
+export function Num({
+  value,
+  kind = "money",
+  currency,
+  asPct,
+  signed,
+  flash,
+  className = "",
+}: NumProps) {
+  // Parse to number-or-null FIRST so the hook can be called unconditionally
+  // (rules of hooks) before the null/NaN early returns below.
+  const raw = value === null || value === undefined || value === "" ? null : Number(value);
+  const numeric = raw !== null && !Number.isNaN(raw) ? raw : null;
+  const ref = useTickFlash(numeric, !!flash);
+
+  if (numeric === null) {
     return <span className={`num text-faint ${className}`}>—</span>;
   }
-  const n = typeof value === "string" ? Number(value) : value;
-  if (Number.isNaN(n)) return <span className={`num text-faint ${className}`}>—</span>;
+  const n = numeric;
 
   const display = asPct ? n * 100 : n;
   const formatted = FORMATTERS[asPct ? "pct" : kind].format(Math.abs(display));
@@ -38,7 +58,7 @@ export function Num({ value, kind = "money", currency, asPct, signed, className 
   const tone = signed ? (display > 0 ? "text-gain" : display < 0 ? "text-loss" : "text-muted") : "";
 
   return (
-    <span className={`num ${tone} ${className}`}>
+    <span ref={ref} className={`num ${tone} ${flash ? "tick" : ""} ${className}`}>
       {sign}
       {formatted}
       {asPct ? "%" : ""}

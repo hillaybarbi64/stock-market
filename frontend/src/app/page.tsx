@@ -40,7 +40,7 @@ export default function OverviewPage() {
       </div>
 
       {summary.isLoading ? (
-        <div className="h-40 animate-pulse rounded-md bg-subtle" />
+        <div className="h-40 rounded-md skeleton" />
       ) : !a ? (
         <Panel>
           <div className="py-8 text-center">
@@ -53,15 +53,16 @@ export default function OverviewPage() {
         </Panel>
       ) : (
         <>
-          <Panel title="שווי ונזילות">
+          <Panel title="שווי ונזילות" revealIndex={0}>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
               <Stat
                 label="שווי חשבון (NLV)"
                 value={a.net_liquidation}
                 currency={ccy}
+                flash
                 title="Net Liquidation Value — שווי כל הנכסים והמזומן, במטבע הבסיס. מקור: IBKR."
               />
-              <Stat label="מזומן כולל" value={a.total_cash} currency={ccy} />
+              <Stat label="מזומן כולל" value={a.total_cash} currency={ccy} flash />
               <Stat label="שווי פוזיציות" value={a.gross_position_value} currency={ccy} />
               <Stat label="כוח קנייה" value={a.buying_power} currency={ccy} />
               <Stat label="Available Funds" value={a.available_funds} currency={ccy} />
@@ -70,11 +71,11 @@ export default function OverviewPage() {
           </Panel>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="רווח והפסד">
+            <Panel title="רווח והפסד" revealIndex={1}>
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                <Stat label="P&L יומי" value={a.daily_pnl} currency={ccy} signed />
-                <Stat label="לא ממומש" value={a.unrealized_pnl} currency={ccy} signed />
-                <Stat label="ממומש (היום)" value={a.realized_pnl} currency={ccy} signed />
+                <Stat label="P&L יומי" value={a.daily_pnl} currency={ccy} signed flash />
+                <Stat label="לא ממומש" value={a.unrealized_pnl} currency={ccy} signed flash />
+                <Stat label="ממומש (היום)" value={a.realized_pnl} currency={ccy} signed flash />
               </div>
               <p className="mt-3 text-[10.5px] leading-relaxed text-faint">
                 P&L יומי ולא־ממומש מגיעים ישירות מ־IBKR. תשואות תקופתיות (שבוע/חודש/שנה)
@@ -82,7 +83,7 @@ export default function OverviewPage() {
               </p>
             </Panel>
 
-            <Panel title="מרג'ין ומטבעות">
+            <Panel title="מרג'ין ומטבעות" revealIndex={2}>
               <div className="grid grid-cols-3 gap-x-6 gap-y-4">
                 <Stat label="Initial Margin" value={a.init_margin} currency={ccy} />
                 <Stat label="Maintenance Margin" value={a.maint_margin} currency={ccy} />
@@ -117,6 +118,7 @@ export default function OverviewPage() {
 
           <Panel
             title="פוזיציות פתוחות"
+            revealIndex={3}
             actions={
               <SourceBadge
                 source={positions.data?.source}

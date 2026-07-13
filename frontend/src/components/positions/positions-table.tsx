@@ -60,7 +60,13 @@ export function PositionsTable({
       }}
     >
       {label}
-      {sortKey === key ? (desc ? " ↓" : " ↑") : ""}
+      <span
+        aria-hidden
+        className="ms-0.5 inline-block w-2.5 text-center transition-opacity duration-[120ms]"
+        style={{ opacity: sortKey === key ? 1 : 0 }}
+      >
+        {desc ? "↓" : "↑"}
+      </span>
     </th>
   );
 
@@ -87,7 +93,10 @@ export function PositionsTable({
                 ? (Number(p.market_price) - Number(p.avg_cost)) / Number(p.avg_cost)
                 : null;
             return (
-              <tr key={p.instrument.conid} className="border-t border-line hover:bg-hover">
+              <tr
+                key={p.instrument.conid}
+                className="border-t border-line transition-colors duration-[120ms] hover:bg-hover"
+              >
                 <td className="py-1.5">
                   <div className="flex items-baseline gap-2">
                     <Sym className="text-[12.5px]">{p.instrument.symbol}</Sym>
@@ -105,13 +114,13 @@ export function PositionsTable({
                 </td>
                 <td className="py-1.5 text-end"><Num value={p.quantity} kind="qty" /></td>
                 <td className="py-1.5 text-end"><Num value={p.avg_cost} kind="price" /></td>
-                <td className="py-1.5 text-end"><Num value={p.market_price} kind="price" /></td>
+                <td className="py-1.5 text-end"><Num value={p.market_price} kind="price" flash /></td>
                 <td className="py-1.5 text-end">
-                  <Num value={p.market_value} currency={p.instrument.currency} />
+                  <Num value={p.market_value} currency={p.instrument.currency} flash />
                 </td>
                 <td className="py-1.5 text-end"><Num value={p.weight} asPct /></td>
-                <td className="py-1.5 text-end"><Num value={p.daily_pnl} signed /></td>
-                <td className="py-1.5 text-end"><Num value={p.unrealized_pnl} signed /></td>
+                <td className="py-1.5 text-end"><Num value={p.daily_pnl} signed flash /></td>
+                <td className="py-1.5 text-end"><Num value={p.unrealized_pnl} signed flash /></td>
                 <td className="py-1.5 text-end"><Num value={entryPct} asPct signed /></td>
               </tr>
             );

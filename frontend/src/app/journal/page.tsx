@@ -88,7 +88,7 @@ export default function JournalPage() {
 
       <Panel title="מחזורי עסקה (Round Trips) — שיוך FIFO אוטומטי, ניתן לתיקון">
         {cycles.isLoading ? (
-          <div className="h-32 animate-pulse rounded-sm bg-subtle" />
+          <div className="h-32 rounded-sm skeleton" />
         ) : !cycles.data?.cycles.length ? (
           <div className="py-10 text-center">
             <p className="text-[13.5px] font-medium">אין עדיין מחזורי עסקה</p>
