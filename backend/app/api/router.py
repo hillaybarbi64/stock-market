@@ -1,6 +1,18 @@
 from fastapi import APIRouter
 
-from app.api import account, journal, performance, positions, risk, sync, system, trades, ws
+from app.api import (
+    account,
+    alerts,
+    journal,
+    performance,
+    positions,
+    reports,
+    risk,
+    sync,
+    system,
+    trades,
+    ws,
+)
 
 api_router = APIRouter()
 api_router.include_router(system.router, prefix="/system", tags=["system"])
@@ -11,4 +23,6 @@ api_router.include_router(performance.router, prefix="/performance", tags=["perf
 api_router.include_router(trades.router, prefix="/trades", tags=["trades"])
 api_router.include_router(journal.router, prefix="/journal", tags=["journal"])
 api_router.include_router(risk.router, prefix="/risk", tags=["risk"])
+api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
+api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
 api_router.include_router(ws.router, tags=["ws"])
