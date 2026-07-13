@@ -122,8 +122,10 @@ def annualized_return(cum_return: Decimal, days_elapsed: int) -> Gated:
                      "תקופה קצרה מדי לאנואליזציה אמינה — מוצגת תשואה מצטברת בלבד")
     if cum_return <= Decimal(-1):
         return Gated(-1.0, True, days_elapsed, MIN_DAYS_ANNUALIZE)
-    years = Decimal(days_elapsed) / Decimal(365)
-    value = float((1 + cum_return) ** (1 / float(years)) - 1)
+    years = days_elapsed / 365.0
+    # cum_return is a Decimal; the fractional power must be done in float
+    # (Decimal ** float is unsupported).
+    value = (1 + float(cum_return)) ** (1 / years) - 1
     return Gated(value, True, days_elapsed, MIN_DAYS_ANNUALIZE)
 
 
