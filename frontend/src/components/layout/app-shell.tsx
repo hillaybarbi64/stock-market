@@ -34,7 +34,10 @@ const NAV: NavGroup[] = [
   },
   {
     label: "מידע",
-    items: [{ href: "/reports", label: "דוחות", icon: "file" }],
+    items: [
+      { href: "/news", label: "חדשות", icon: "news" },
+      { href: "/reports", label: "דוחות", icon: "file" },
+    ],
   },
   {
     label: "מערכת",

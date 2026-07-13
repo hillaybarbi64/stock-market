@@ -4,6 +4,7 @@ from app.api import (
     account,
     alerts,
     journal,
+    news,
     performance,
     positions,
     reports,
@@ -25,4 +26,5 @@ api_router.include_router(journal.router, prefix="/journal", tags=["journal"])
 api_router.include_router(risk.router, prefix="/risk", tags=["risk"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+api_router.include_router(news.router, prefix="/news", tags=["news"])
 api_router.include_router(ws.router, tags=["ws"])

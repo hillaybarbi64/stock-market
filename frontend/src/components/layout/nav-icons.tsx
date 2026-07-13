@@ -15,6 +15,7 @@ export type IconName =
   | "doc"
   | "refresh"
   | "sliders"
+  | "news"
   | "pulse";
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -94,6 +95,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   pulse: <path d="M2.5 8h2.5l1.5-4 2.5 8 1.5-4h3" />,
+  news: (
+    <>
+      <path d="M2.5 4h8v9H3.6A1.1 1.1 0 0 1 2.5 11.9z" />
+      <path d="M10.5 6.5h2.4a.6.6 0 0 1 .6.6V12a1 1 0 0 1-1 1" />
+      <line x1="4.3" y1="6.2" x2="8.7" y2="6.2" />
+      <line x1="4.3" y1="8.4" x2="8.7" y2="8.4" />
+      <line x1="4.3" y1="10.6" x2="7" y2="10.6" />
+    </>
+  ),
 };
 
 export function NavIcon({ name, className = "" }: { name: IconName; className?: string }) {

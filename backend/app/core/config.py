@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     ibkr_flex_token: str = ""  # secret — env only, masked in logs
     ibkr_flex_query_id: str = ""
 
+    # Market news (optional). Free key from finnhub.io; empty → news disabled.
+    finnhub_api_key: str = ""  # secret — env only
+
     # Intraday snapshot cadence (minutes); 0 disables
     snapshot_interval_min: int = 15
 
