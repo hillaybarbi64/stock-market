@@ -73,6 +73,11 @@ function withAnimation(option: EChartsOption): EChartsOption {
   };
 }
 
+const CAT_FALLBACK = [
+  "#5b8cff", "#3fb884", "#d9a53d", "#a97bd6",
+  "#e0846b", "#5fb0c9", "#b0b64d", "#d67ba3",
+];
+
 /** Read the current values of our design tokens for chart styling. */
 export function chartTokens() {
   if (typeof window === "undefined") {
@@ -81,9 +86,12 @@ export function chartTokens() {
       faint: "#6d7182",
       line: "#2c2f3a",
       accent: "#6c93f0",
+      accentSoft: "rgba(108,147,240,0.16)",
       gain: "#3fb884",
       loss: "#e06470",
+      warn: "#d9a53d",
       panel: "#1a1c23",
+      cat: CAT_FALLBACK,
     };
   }
   const css = getComputedStyle(document.documentElement);
@@ -93,8 +101,11 @@ export function chartTokens() {
     faint: v("--fg-faint", "#6d7182"),
     line: v("--border", "#2c2f3a"),
     accent: v("--accent", "#6c93f0"),
+    accentSoft: v("--accent-soft", "rgba(108,147,240,0.16)"),
     gain: v("--gain", "#3fb884"),
     loss: v("--loss", "#e06470"),
+    warn: v("--warn", "#d9a53d"),
     panel: v("--bg-panel", "#1a1c23"),
+    cat: CAT_FALLBACK.map((fb, i) => v(`--cat-${i + 1}`, fb)),
   };
 }
