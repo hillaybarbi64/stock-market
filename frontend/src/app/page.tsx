@@ -8,11 +8,13 @@ import {
   type CurvePoint,
 } from "@/components/charts/portfolio-chart";
 import { CandlestickChart, type Bar } from "@/components/charts/candlestick-chart";
+import { Sparkline } from "@/components/charts/sparkline";
+import { MoversList, type MoverRow } from "@/components/dashboard/movers-list";
+import { PriceLadder } from "@/components/dashboard/price-ladder";
 import { PositionsTable } from "@/components/positions/positions-table";
 import { Num, Sym } from "@/components/ui/num";
 import { Panel } from "@/components/ui/panel";
 import { SourceBadge } from "@/components/ui/source-badge";
-import { StatBlock } from "@/components/ui/stat-block";
 import { Tabs } from "@/components/ui/tabs";
 import { apiGet } from "@/lib/api";
 import type { AccountSummary, BalancesResponse, PositionsResponse, Sourced } from "@/lib/types";
@@ -50,6 +52,17 @@ const RANGE_DAYS: Record<Range, number | null> = {
   "1Y": 366,
   ALL: null,
 };
+
+// Candlestick timeframes: slice the daily-bar series to the last N trading days.
+type TF = "1M" | "3M" | "6M" | "1Y" | "ALL";
+const TFS: TF[] = ["1M", "3M", "6M", "1Y", "ALL"];
+const TF_BARS: Record<TF, number | null> = { "1M": 21, "3M": 63, "6M": 126, "1Y": 252, ALL: null };
+
+const CHART_VIEWS = [
+  { value: "instrument" as const, label: "נכס" },
+  { value: "portfolio" as const, label: "התיק" },
+];
+type ChartView = "instrument" | "portfolio";
 
 function filterByRange(points: CurvePoint[], range: Range): CurvePoint[] {
   if (points.length === 0) return points;
@@ -97,68 +110,90 @@ export default function OverviewPage() {
     queryFn: () => apiGet<BarsResponse>("/positions/bars?days=180"),
     refetchInterval: 300_000,
   });
+
   const [mode, setMode] = useState<ChartMode>("nav");
   const [range, setRange] = useState<Range>("ALL");
+  const [view, setView] = useState<ChartView>("instrument");
+  const [tf, setTf] = useState<TF>("3M");
+  const [picked, setPicked] = useState<number | null>(null);
 
   const a = summary.data?.data;
   const ccy = a?.base_currency ?? "USD";
   const r = perf.data?.returns;
   const dayPnl = a?.daily_pnl != null ? Number(a.daily_pnl) : null;
-  const posRows = positions.data?.positions ?? [];
+  const posRows = useMemo(() => positions.data?.positions ?? [], [positions.data]);
+  const series = bars.data?.series;
 
   const shownPoints = useMemo(
     () => (curve.data?.points ? filterByRange(curve.data.points, range) : []),
-    [curve.data?.points, range],
+    [curve.data, range],
   );
 
-  // Exposure ladder: cash + each holding as a share of total assets.
-  const exposure = useMemo(() => {
-    if (!a) return null;
-    const cash = Number(a.total_cash ?? 0);
-    const rows = posRows
-      .map((p) => ({
-        label: p.instrument.symbol,
-        value: Number(p.market_value ?? 0),
-        kind: "position" as const,
-      }))
-      .filter((x) => x.value > 0)
-      .sort((x, y) => y.value - x.value);
-    const posTotal = rows.reduce((s, x) => s + x.value, 0);
-    const base = Math.max(cash, 0) + posTotal;
-    if (base <= 0) return null;
-    const all = [{ label: "מזומן", value: Math.max(cash, 0), kind: "cash" as const }, ...rows];
-    return { rows: all.map((x) => ({ ...x, pct: x.value / base })), base };
-  }, [a, posRows]);
-
-  const topHolding = useMemo(
-    () =>
-      posRows
-        .filter((p) => Number(p.market_value ?? 0) > 0)
-        .sort((x, y) => Number(y.market_value ?? 0) - Number(x.market_value ?? 0))[0],
-    [posRows],
-  );
-
-  // conid → recent closes, for the positions-table sparklines.
+  // conid → recent closes, for sparklines everywhere on the page.
   const sparklines = useMemo(() => {
     const map: Record<number, number[]> = {};
-    const series = bars.data?.series;
     if (series) {
       for (const [conid, s] of Object.entries(series)) {
         if (s.bars.length > 1) map[Number(conid)] = s.bars.slice(-30).map((b) => b.close);
       }
     }
     return map;
-  }, [bars.data]);
+  }, [series]);
 
-  const topBars = topHolding
-    ? bars.data?.series?.[String(topHolding.instrument.conid)]?.bars ?? []
-    : [];
+  // Portfolio "movers": one row per holding, biggest first, with the last close,
+  // the day-over-day % move (from the bar series) and an inline sparkline.
+  const moverRows = useMemo<MoverRow[]>(() => {
+    return posRows
+      .filter((p) => Number(p.market_value ?? 0) > 0)
+      .sort((x, y) => Number(y.market_value ?? 0) - Number(x.market_value ?? 0))
+      .map((p) => {
+        const conid = p.instrument.conid;
+        const b = series?.[String(conid)]?.bars ?? [];
+        const last = p.market_price != null ? Number(p.market_price) : b.at(-1)?.close ?? null;
+        const prev = b.length >= 2 ? b[b.length - 2].close : null;
+        const cur = b.at(-1)?.close ?? last;
+        const changePct = prev != null && cur != null && prev !== 0 ? (cur - prev) / prev : null;
+        return {
+          conid,
+          symbol: p.instrument.symbol,
+          name: p.instrument.name,
+          last,
+          changePct,
+          spark: sparklines[conid] ?? [],
+          delayed: p.price_quality === "delayed",
+        };
+      });
+  }, [posRows, series, sparklines]);
+
+  // Resolve the active instrument (user pick, else biggest holding).
+  const activeConid =
+    picked != null && moverRows.some((m) => m.conid === picked) ? picked : moverRows[0]?.conid ?? null;
+  const selPos = posRows.find((p) => p.instrument.conid === activeConid) ?? null;
+  const selMover = moverRows.find((m) => m.conid === activeConid) ?? null;
+  const selBars = useMemo(
+    () => (activeConid != null ? series?.[String(activeConid)]?.bars ?? [] : []),
+    [activeConid, series],
+  );
+  const tfBars = useMemo(() => {
+    const n = TF_BARS[tf];
+    return n == null ? selBars : selBars.slice(-n);
+  }, [selBars, tf]);
+  const lastBar = tfBars.at(-1) ?? null;
+  const prevBar = tfBars.length >= 2 ? tfBars[tfBars.length - 2] : null;
+  const selPrice = selPos?.market_price != null ? Number(selPos.market_price) : lastBar?.close ?? null;
+  const selAvg = selPos?.avg_cost != null ? Number(selPos.avg_cost) : null;
+
+  const equitySpark = useMemo(
+    () => (curve.data?.points ?? []).slice(-48).map((p) => p.nav),
+    [curve.data?.points],
+  );
 
   if (summary.isLoading) {
     return (
-      <div className="grid grid-cols-12 gap-3.5">
-        <div className="col-span-12 h-64 rounded-xl skeleton lg:col-span-8" />
-        <div className="col-span-12 h-64 rounded-xl skeleton lg:col-span-4" />
+      <div className="grid grid-cols-12 gap-3">
+        <div className="col-span-12 h-[520px] rounded-xl skeleton xl:col-span-3" />
+        <div className="col-span-12 h-[520px] rounded-xl skeleton xl:col-span-6" />
+        <div className="col-span-12 h-[520px] rounded-xl skeleton xl:col-span-3" />
       </div>
     );
   }
@@ -176,229 +211,265 @@ export default function OverviewPage() {
     );
   }
 
-  const topEntryPct =
-    topHolding && topHolding.avg_cost != null && topHolding.market_price != null &&
-    Number(topHolding.avg_cost) !== 0
-      ? (Number(topHolding.market_price) - Number(topHolding.avg_cost)) / Number(topHolding.avg_cost)
-      : null;
-
   return (
-    <div className="grid grid-cols-12 items-start gap-3.5">
-      {/* ── HERO: portfolio value + chart ─────────────────────────── */}
-      <Panel
-        className="col-span-12 lg:col-span-8"
-        title="שווי התיק"
-        subtitle="Net Liquidation"
-        revealIndex={0}
-        actions={
-          <div className="flex items-center gap-1" dir="ltr">
-            {RANGES.map((rg) => (
-              <button
-                key={rg}
-                type="button"
-                onClick={() => setRange(rg)}
-                className={`press rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors ${
-                  range === rg
-                    ? "bg-accent text-accent-fg"
-                    : "text-faint hover:text-muted"
-                }`}
-              >
-                {rg}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        <div className="flex flex-wrap items-end justify-between gap-3 px-1 pb-2">
-          <div>
-            <div className="flex items-baseline gap-2">
+    <div className="grid grid-cols-12 items-start gap-3">
+      {/* ── LEFT RAIL: account + overview + movers ─────────────────── */}
+      <div className="col-span-12 flex flex-col gap-3 xl:col-span-3">
+        <Panel revealIndex={0} padding="none" grip={false}>
+          <div className="px-3.5 pb-3 pt-3.5">
+            <div className="flex items-center justify-between">
+              <span className="t-label t-label-upper" dir="ltr">
+                Individual
+              </span>
+              <span className="tag">{"מרג'ין"}</span>
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
               <span className="t-hero">
                 <Num value={a.net_liquidation} flash />
               </span>
-              <span className="text-[12px] text-faint">{ccy}</span>
+              <span className="text-[11px] text-faint">{ccy}</span>
             </div>
-            <div className="mt-2 flex items-center gap-2.5 text-[12.5px]">
+            <div className="mt-1.5 flex items-center gap-2 text-[12px]">
               <span
-                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-semibold ${
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold ${
                   (dayPnl ?? 0) < 0
                     ? "bg-[color-mix(in_srgb,var(--loss)_14%,transparent)] text-down-bright"
                     : "bg-accent-soft text-up-bright"
                 }`}
               >
-                <span className="text-[10px]">{(dayPnl ?? 0) < 0 ? "▼" : "▲"}</span>
+                <span className="text-[9px]">{(dayPnl ?? 0) < 0 ? "▼" : "▲"}</span>
                 <Num value={dayPnl != null ? Math.abs(dayPnl) : null} />
               </span>
               <Num value={r?.day ?? null} asPct signed />
               <span className="text-faint">היום</span>
-              {r?.total_twr != null && (
-                <>
-                  <span className="text-faint">·</span>
-                  <Num value={r.total_twr} asPct signed />
-                  <span className="text-faint">מצטבר</span>
-                </>
-              )}
             </div>
+            {equitySpark.length >= 2 && (
+              <Sparkline
+                data={equitySpark}
+                width={260}
+                height={34}
+                tone={(r?.total_twr ?? 0) < 0 ? "loss" : "accent"}
+                className="mt-2.5 h-[34px] w-full"
+              />
+            )}
           </div>
-          <Tabs items={CHART_MODES} value={mode} onChange={setMode} size="sm" ariaLabel="מצב גרף" />
-        </div>
-
-        {curve.isLoading ? (
-          <div className="mx-1 h-[300px] rounded-lg skeleton" />
-        ) : curve.data?.available && shownPoints.length >= 2 ? (
-          <>
-            <PortfolioChart points={shownPoints} mode={mode} currency={ccy} height={300} />
-            <p className="t-help px-1">▲ הפקדה · ▼ משיכה — כדי שתזרים לא ייראה כרווח/הפסד.</p>
-          </>
-        ) : (
-          <p className="py-16 text-center text-[12.5px] text-muted">
-            הגרף יופיע לאחר סנכרון היסטוריה (מסך סנכרון).
-          </p>
-        )}
-      </Panel>
-
-      {/* ── RIGHT COL 1: exposure ladder + P&L ────────────────────── */}
-      <div className="col-span-12 flex flex-col gap-3.5 lg:col-span-4">
-        <Panel title="חשיפה והקצאה" revealIndex={1} padding="none"
-          actions={<span className="tag">100%</span>}>
-          {exposure ? (
-            <div className="py-1.5">
-              {exposure.rows.map((row) => (
-                <div key={row.label} className="relative flex items-center justify-between px-3.5 py-2 text-[12.5px]">
-                  <span
-                    aria-hidden
-                    className="absolute inset-y-0.5 start-0 rounded-e-md"
-                    style={{
-                      width: `${(row.pct * 100).toFixed(1)}%`,
-                      background: row.kind === "cash" ? "var(--bg-hover)" : "var(--accent-soft)",
-                    }}
-                  />
-                  <span className="relative z-10 flex items-center gap-2.5">
-                    <span
-                      aria-hidden
-                      className="size-2 rounded-[3px]"
-                      style={{ background: row.kind === "cash" ? "var(--fg-faint)" : "var(--accent)" }}
-                    />
-                    {row.kind === "cash" ? <span>מזומן</span> : <Sym>{row.label}</Sym>}
-                  </span>
-                  <span className="relative z-10 flex items-center gap-3 text-muted">
-                    <Num value={row.value} />
-                    <span className="w-10 text-end font-semibold text-fg"><Num value={row.pct} asPct /></span>
-                  </span>
-                </div>
-              ))}
-              <div className="flex items-center justify-between border-t border-line px-3.5 py-2 text-[11px] text-faint">
-                <span>שווי נכסים · <span className="sym">{ccy}</span></span>
-                <span>מינוף <Num value={a.leverage} kind="qty" />×</span>
-              </div>
-            </div>
-          ) : (
-            <p className="px-3.5 py-6 text-center text-[12px] text-muted">אין נתוני הקצאה.</p>
-          )}
+          <div className="border-t border-line">
+            <StatRow label="כוח קנייה" en="Buying power" value={a.buying_power} />
+            <StatRow label="מזומן" en="Cash" value={a.total_cash} />
+            <StatRow label="עודף נזילות" en="Excess liquidity" value={a.excess_liquidity} />
+            <StatRow label="מרג'ין אחזקה" en="Maint. margin" value={a.maint_margin} />
+            <StatRow label="מינוף" en="Leverage" value={a.leverage} kind="qty" suffix="×" last />
+          </div>
         </Panel>
 
-        <Panel title="רווח והפסד" subtitle="P&L" revealIndex={2} padding="none"
-          actions={<span className="tag">היום</span>}>
-          <PnlRow label="יומי" sub="Daily P&L" value={a.daily_pnl} ccy={ccy} />
-          <PnlRow label="לא ממומש" sub="פוזיציות פתוחות" value={a.unrealized_pnl} ccy={ccy} />
-          <PnlRow label="ממומש" sub="מומש היום" value={a.realized_pnl} ccy={ccy} last />
+        <Panel
+          title="המובילים בתיק"
+          subtitle="Movers"
+          revealIndex={1}
+          padding="none"
+          actions={<span className="tag">{moverRows.length}</span>}
+        >
+          <MoversList rows={moverRows} selected={activeConid} onSelect={setPicked} />
         </Panel>
       </div>
 
-      {/* ── ASSET SPOTLIGHT (candlestick — real after price sync) ──── */}
+      {/* ── CENTRE: chart terminal + account detail band ───────────── */}
+      <div className="col-span-12 flex flex-col gap-3 xl:col-span-6">
       <Panel
-        className="col-span-12 lg:col-span-8"
-        title={topHolding ? topHolding.instrument.symbol : "החזקה מובילה"}
-        subtitle={topHolding?.instrument.name ?? undefined}
-        revealIndex={3}
+        revealIndex={2}
+        padding="none"
+        grip={false}
+        title={view === "instrument" ? selMover?.symbol ?? "נכס" : "שווי התיק"}
+        subtitle={view === "instrument" ? selMover?.name ?? undefined : "Net Liquidation"}
+        info={
+          view === "instrument" && selMover?.delayed ? <span className="tag tag--warn">DELAYED</span> : null
+        }
         actions={
-          topHolding ? (
-            <div className="flex items-center gap-3">
-              <span className="num text-[16px] font-semibold"><Num value={topHolding.market_price} kind="price" flash /></span>
-              <Num value={topEntryPct} asPct signed />
-              {topHolding.price_quality === "delayed" && <span className="tag tag--warn">DELAYED</span>}
-            </div>
-          ) : null
+          <Tabs items={CHART_VIEWS} value={view} onChange={setView} size="sm" ariaLabel="תצוגת גרף" />
         }
       >
-        {topBars.length > 1 ? (
-          <>
-            <CandlestickChart bars={topBars} height={300} currency={ccy} />
-            <div className="flex flex-wrap gap-x-6 gap-y-1 px-1 pt-1">
-              <span className="t-help flex items-center gap-1.5">
-                <i className="inline-block h-0.5 w-3 rounded-full" style={{ background: "var(--warn)" }} /> MA7
-              </span>
-              <span className="t-help flex items-center gap-1.5">
-                <i className="inline-block h-0.5 w-3 rounded-full" style={{ background: "var(--info)" }} /> MA25
-              </span>
-              <span className="t-help">· נרות יומיים (TRADES) · מקור IBKR</span>
-            </div>
-          </>
-        ) : (
-          <div className="flex h-[300px] flex-col items-center justify-center gap-3 text-center">
-            <CandleGlyph />
-            <div>
-              <p className="text-[13px] font-medium text-muted">גרף נרות (Candlesticks) עם ממוצעים נעים ונפח</p>
-              <p className="mx-auto mt-1 max-w-sm text-[11.5px] text-faint">
-                {bars.isLoading
-                  ? "טוען היסטוריית מחירים…"
-                  : "יתווסף מיד לאחר סנכרון היסטוריית המחירים מ־IBKR (נדרש חיבור Gateway פעיל)."}
-              </p>
-            </div>
-            {topHolding && (
-              <div className="mt-1 flex flex-wrap justify-center gap-x-6 gap-y-2 text-[12px]">
-                <MiniStat label="כמות" value={topHolding.quantity} kind="qty" />
-                <MiniStat label="מחיר ממוצע" value={topHolding.avg_cost} kind="price" />
-                <MiniStat label="שווי שוק" value={topHolding.market_value} ccy={ccy} />
-                <MiniStat label="לא ממומש" value={topHolding.unrealized_pnl} signed />
+        {view === "instrument" ? (
+          <div>
+            {/* OHLC readout strip */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-3.5 py-2">
+              <div className="flex items-baseline gap-1.5">
+                <span className="num text-[18px] font-semibold">
+                  <Num value={selPrice} kind="price" flash />
+                </span>
+                {prevBar && lastBar && prevBar.close !== 0 && (
+                  <Num
+                    value={(lastBar.close - prevBar.close) / prevBar.close}
+                    asPct
+                    signed
+                    className="text-[12px]"
+                  />
+                )}
               </div>
+              {lastBar && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]" dir="ltr">
+                  <Ohlc label="O" value={lastBar.open} />
+                  <Ohlc label="H" value={lastBar.high} />
+                  <Ohlc label="L" value={lastBar.low} />
+                  <Ohlc label="C" value={lastBar.close} />
+                  <span className="flex items-center gap-1">
+                    <span className="text-faint">V</span>
+                    <Num value={lastBar.volume} kind="qty" className="text-muted" />
+                  </span>
+                </div>
+              )}
+              <div className="ms-auto flex items-center gap-3 text-[10px]" dir="ltr">
+                <LegendDot color="var(--warn)" label="MA7" />
+                <LegendDot color="var(--info)" label="MA25" />
+              </div>
+            </div>
+
+            {tfBars.length > 1 ? (
+              <>
+                <CandlestickChart bars={tfBars} height={392} currency={ccy} />
+                <div className="flex items-center justify-between border-t border-line px-3 py-1.5">
+                  <div className="flex items-center gap-1" dir="ltr">
+                    {TFS.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTf(t)}
+                        className={`press rounded-md px-2 py-0.5 text-[10.5px] font-medium transition-colors ${
+                          tf === t ? "bg-accent text-accent-fg" : "text-faint hover:text-muted"
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="chip text-[10px]" dir="ltr">
+                    <span className="text-faint">Interval</span> 1D
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex h-[392px] flex-col items-center justify-center gap-3 px-6 text-center">
+                <CandleGlyph />
+                <p className="text-[12.5px] text-muted">גרף נרות יופיע לאחר סנכרון היסטוריית מחירים מ־IBKR.</p>
+                {selPos && (
+                  <div className="mt-1 flex flex-wrap justify-center gap-x-5 gap-y-1.5 text-[12px]">
+                    <MiniStat label="כמות" value={selPos.quantity} kind="qty" />
+                    <MiniStat label="מחיר ממוצע" value={selPos.avg_cost} kind="price" />
+                    <MiniStat label="שווי שוק" value={selPos.market_value} ccy={ccy} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-3.5">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-baseline gap-2">
+                <span className="t-hero">
+                  <Num value={a.net_liquidation} flash />
+                </span>
+                {r?.total_twr != null && (
+                  <span className="flex items-center gap-1 text-[12px]">
+                    <Num value={r.total_twr} asPct signed />
+                    <span className="text-faint">מצטבר</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2" dir="ltr">
+                <Tabs items={CHART_MODES} value={mode} onChange={setMode} size="sm" ariaLabel="מצב גרף" />
+                <div className="flex items-center gap-1">
+                  {RANGES.map((rg) => (
+                    <button
+                      key={rg}
+                      type="button"
+                      onClick={() => setRange(rg)}
+                      className={`press rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors ${
+                        range === rg ? "bg-accent text-accent-fg" : "text-faint hover:text-muted"
+                      }`}
+                    >
+                      {rg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {curve.data?.available && shownPoints.length >= 2 ? (
+              <>
+                <PortfolioChart points={shownPoints} mode={mode} currency={ccy} height={360} />
+                <p className="t-help px-1">▲ הפקדה · ▼ משיכה — כדי שתזרים לא ייראה כרווח/הפסד.</p>
+              </>
+            ) : (
+              <p className="py-24 text-center text-[12.5px] text-muted">
+                עקומת ההון תופיע לאחר סנכרון היסטוריה (מסך סנכרון).
+              </p>
             )}
           </div>
         )}
       </Panel>
 
-      {/* ── RIGHT COL 2: margin & FX + news ───────────────────────── */}
-      <div className="col-span-12 flex flex-col gap-3.5 lg:col-span-4">
-        <Panel title="מרג'ין ומטבעות" revealIndex={4} padding="none">
-          <PnlRow label="מרג'ין התחלתי" sub="Initial Margin" value={a.init_margin} ccy={ccy} plain />
-          <PnlRow label="מרג'ין אחזקה" sub="Maintenance" value={a.maint_margin} ccy={ccy} plain />
-          {balances.data && balances.data.balances.length > 0 && (
-            <table className="w-full border-t border-line text-[12px]">
-              <thead>
-                <tr className="t-label">
-                  <th className="px-3.5 pb-1 pt-2 text-start font-normal">מטבע</th>
-                  <th className="px-3.5 pb-1 pt-2 text-end font-normal">מזומן</th>
-                  <th className="px-3.5 pb-1 pt-2 text-end font-normal">שער לבסיס</th>
-                </tr>
-              </thead>
-              <tbody>
-                {balances.data.balances.map((b) => (
-                  <tr key={b.currency} className="border-t border-line">
-                    <td className="px-3.5 py-1.5"><Sym>{b.currency}</Sym></td>
-                    <td className="px-3.5 py-1.5 text-end"><Num value={b.cash_balance} /></td>
-                    <td className="px-3.5 py-1.5 text-end"><Num value={b.fx_rate_to_base} kind="price" className="text-faint" /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Account-detail band: margin, funds & FX — fills the column and
+          keeps the terminal dense, like the Legend account overview. */}
+      <Panel title="פרטי חשבון" subtitle="Margin & FX" revealIndex={4} padding="none" grip={false}>
+        <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">
+          <DetailCell label="מרג'ין התחלתי" en="Init margin" value={a.init_margin} />
+          <DetailCell label="מרג'ין אחזקה" en="Maint. margin" value={a.maint_margin} />
+          <DetailCell label="כספים זמינים" en="Avail. funds" value={a.available_funds} />
+          <DetailCell label="שווי פוזיציות" en="Gross value" value={a.gross_position_value} />
+        </div>
+        {balances.data && balances.data.balances.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-line px-3.5 py-2.5">
+            <span className="t-label">מטבעות</span>
+            {balances.data.balances.map((b) => (
+              <span key={b.currency} className="flex items-center gap-1.5 text-[11.5px]" dir="ltr">
+                <Sym className="text-faint">{b.currency}</Sym>
+                <Num value={b.cash_balance} />
+                <span className="text-[9.5px] text-faint">@{Number(b.fx_rate_to_base ?? 1).toFixed(4)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </Panel>
+      </div>
+
+      {/* ── RIGHT RAIL: price ladder + position P&L ────────────────── */}
+      <div className="col-span-12 flex flex-col gap-3 xl:col-span-3">
+        <Panel
+          title={selMover ? selMover.symbol : "סולם מחיר"}
+          subtitle="Volume by price"
+          revealIndex={3}
+          padding="none"
+          grip={false}
+        >
+          {selPos && (
+            <div className="grid grid-cols-2 gap-px border-b border-line bg-line text-[11px]">
+              <div className="bg-panel px-3 py-2">
+                <div className="t-label">P&L לא ממומש</div>
+                <div className="num mt-0.5 text-[15px] font-semibold">
+                  <Num value={selPos.unrealized_pnl} signed flash />
+                </div>
+              </div>
+              <div className="bg-panel px-3 py-2">
+                <div className="t-label">כמות @ ממוצע</div>
+                <div className="num mt-0.5 text-[13px] text-muted" dir="ltr">
+                  <Num value={selPos.quantity} kind="qty" /> @ <Num value={selPos.avg_cost} kind="price" />
+                </div>
+              </div>
+            </div>
           )}
+          <PriceLadder bars={selBars} last={selPrice} avgCost={selAvg} />
         </Panel>
 
-        <Panel title="חדשות מהתיק" subtitle="Market Intelligence" revealIndex={5}
-          actions={<span className="tag">בקרוב</span>}>
-          <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <p className="text-[12.5px] text-muted">מרכז חדשות מקושר להחזקות</p>
-            <p className="mx-auto max-w-[15rem] text-[11.5px] text-faint">
-              חדשות רלוונטיות לכל נכס בתיק, עם דירוג רלוונטיות. מודול זה יופעל בהמשך (Finnhub).
-            </p>
-          </div>
+        <Panel title="רווח והפסד" subtitle="P&L" revealIndex={4} padding="none" grip={false}>
+          <PnlRow label="יומי" en="Daily" value={a.daily_pnl} ccy={ccy} />
+          <PnlRow label="לא ממומש" en="Unrealized" value={a.unrealized_pnl} ccy={ccy} />
+          <PnlRow label="ממומש" en="Realized" value={a.realized_pnl} ccy={ccy} last />
         </Panel>
       </div>
 
-      {/* ── POSITIONS ─────────────────────────────────────────────── */}
+      {/* ── POSITIONS ──────────────────────────────────────────────── */}
       <Panel
         className="col-span-12"
         title="פוזיציות פתוחות"
-        revealIndex={6}
+        revealIndex={5}
         actions={
           <div className="flex items-center gap-3 text-[11px] text-faint">
             <span>{posRows.length} פוזיציות</span>
@@ -416,31 +487,110 @@ export default function OverviewPage() {
   );
 }
 
+function StatRow({
+  label,
+  en,
+  value,
+  kind = "money",
+  suffix,
+  last = false,
+}: {
+  label: string;
+  en: string;
+  value: string | number | null | undefined;
+  kind?: "money" | "price" | "qty";
+  suffix?: string;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 px-3.5 py-[7px] ${last ? "" : "border-b border-line/60"}`}
+    >
+      <span className="text-[11.5px] text-muted">
+        {label}
+        <span className="ms-1.5 text-[9.5px] text-faint" dir="ltr">
+          {en}
+        </span>
+      </span>
+      <span className="num whitespace-nowrap text-[12.5px] font-medium">
+        <Num value={value} kind={kind} />
+        {suffix}
+      </span>
+    </div>
+  );
+}
+
+function DetailCell({
+  label,
+  en,
+  value,
+}: {
+  label: string;
+  en: string;
+  value: string | number | null | undefined;
+}) {
+  return (
+    <div className="bg-panel px-3.5 py-2.5">
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[11px] text-muted">{label}</span>
+        <span className="text-[9px] text-faint" dir="ltr">
+          {en}
+        </span>
+      </div>
+      <div className="num mt-0.5 text-[14px] font-semibold">
+        <Num value={value} />
+      </div>
+    </div>
+  );
+}
+
 function PnlRow({
   label,
-  sub,
+  en,
   value,
   ccy,
   last = false,
-  plain = false,
 }: {
   label: string;
-  sub?: string;
+  en?: string;
   value: string | number | null | undefined;
   ccy?: string;
   last?: boolean;
-  plain?: boolean;
 }) {
   return (
-    <div className={`flex items-center justify-between gap-3 px-3.5 py-3 ${last ? "" : "border-b border-line"}`}>
+    <div
+      className={`flex items-center justify-between gap-3 px-3.5 py-2.5 ${last ? "" : "border-b border-line"}`}
+    >
       <span className="text-[11.5px] text-muted">
         {label}
-        {sub && <span className="mt-0.5 block text-[9.5px] text-faint">{sub}</span>}
+        {en && (
+          <span className="ms-1.5 text-[9.5px] text-faint" dir="ltr">
+            {en}
+          </span>
+        )}
       </span>
-      <span className="num whitespace-nowrap text-[17px] font-semibold">
-        <Num value={value} currency={ccy} signed={!plain} flash={!plain} />
+      <span className="num whitespace-nowrap text-[15px] font-semibold">
+        <Num value={value} currency={ccy} signed flash />
       </span>
     </div>
+  );
+}
+
+function Ohlc({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className="text-faint">{label}</span>
+      <Num value={value} kind="price" className="text-muted" />
+    </span>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1 text-faint">
+      <i className="inline-block h-0.5 w-3 rounded-full" style={{ background: color }} />
+      {label}
+    </span>
   );
 }
 
@@ -449,18 +599,16 @@ function MiniStat({
   value,
   kind = "money",
   ccy,
-  signed,
 }: {
   label: string;
   value: string | number | null | undefined;
   kind?: "money" | "price" | "qty";
   ccy?: string;
-  signed?: boolean;
 }) {
   return (
     <span className="inline-flex items-baseline gap-1.5">
       <span className="text-faint">{label}</span>
-      <Num value={value} kind={kind} currency={ccy} signed={signed} />
+      <Num value={value} kind={kind} currency={ccy} />
     </span>
   );
 }

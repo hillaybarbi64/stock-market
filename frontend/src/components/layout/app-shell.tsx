@@ -7,6 +7,7 @@ import { ConnectionStatus } from "@/components/layout/connection-status";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { NavIcon, type IconName } from "@/components/layout/nav-icons";
 import { Clock } from "@/components/layout/clock";
+import { MarketStatus } from "@/components/dashboard/market-status";
 import { fetchConnection } from "@/lib/api";
 import { useLiveUpdates } from "@/lib/ws";
 
@@ -144,6 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="ms-auto flex items-center gap-2.5">
+            <MarketStatus />
             <ConnectionStatus />
             <span className="chip">
               <span className="text-faint">עודכן</span>
