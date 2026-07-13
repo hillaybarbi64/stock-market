@@ -9,7 +9,9 @@ docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon is not running. Star
 
 if [ ! -f .env ]; then
   echo "==> Creating .env from .env.example (with a random DB password)"
-  PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+  # `|| true` avoids a spurious SIGPIPE failure under `set -o pipefail`:
+  # `head -c 24` closes the pipe early, which is expected and harmless here.
+  PASS="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 || true)"
   sed "s/CHANGE_ME/${PASS}/g" .env.example > .env
   echo "    Created .env — now edit it and fill IBKR_FLEX_TOKEN + IBKR_FLEX_QUERY_ID (see docs/RUNBOOK.md §3)"
 else
