@@ -1,5 +1,6 @@
 """FastAPI application entrypoint."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -22,21 +23,29 @@ async def lifespan(app: FastAPI):
 
     from app.ibkr.gateway import GatewaySupervisor
     from app.services import registry
+    from app.services.flex_sync import FlexSyncService
     from app.services.live_state import LiveStateService
+    from app.services.scheduler import daily_sync_loop
     from app.ws.hub import hub
 
     registry.live_state = LiveStateService(hub, settings.snapshot_interval_min)
+    registry.flex_sync = FlexSyncService(settings)
+    sync_loop_task = None
     if settings.ibkr_gateway_autostart:
         registry.supervisor = GatewaySupervisor(settings, registry.live_state)
         await registry.supervisor.start()
         log.info("gateway_supervisor_started", readonly=True)
+        sync_loop_task = asyncio.create_task(daily_sync_loop(registry.flex_sync))
 
     yield
 
+    if sync_loop_task is not None:
+        sync_loop_task.cancel()
     if registry.supervisor is not None:
         await registry.supervisor.stop()
         registry.supervisor = None
     registry.live_state = None
+    registry.flex_sync = None
     await dispose_engine()
     log.info("shutdown")
 

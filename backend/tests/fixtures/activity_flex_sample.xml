@@ -1,0 +1,32 @@
+<FlexQueryResponse queryName="full-history" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U7654321" fromDate="2026-02-17" toDate="2026-07-13" period="Last365CalendarDays" whenGenerated="2026-07-13;09:00:00">
+<Trades>
+<Trade accountId="U7654321" assetCategory="STK" symbol="SNEX" description="STONEX GROUP INC" conid="431495220" listingExchange="NASDAQ" currency="USD" fxRateToBase="1" tradeID="7001001" ibExecID="00030f00.6a30db78.01.01" ibOrderID="5314987820" dateTime="2026-06-15;16:19:32" quantity="8" tradePrice="137.385" tradeMoney="1099.08" proceeds="-1099.08" ibCommission="-1" ibCommissionCurrency="USD" netCash="-1100.08" buySell="BUY" orderType="MKT" exchange="DARK" fifoPnlRealized="0" openCloseIndicator="O"/>
+<Trade accountId="U7654321" assetCategory="STK" symbol="MXL" description="MAXLINEAR INC" conid="266143774" listingExchange="NASDAQ" currency="USD" fxRateToBase="1" tradeID="7001002" ibExecID="0001830e.6a21d83d.01.01" ibOrderID="5272628961" dateTime="2026-06-04;19:09:25" quantity="10" tradePrice="95.24" tradeMoney="952.40" proceeds="-952.40" ibCommission="-1" ibCommissionCurrency="USD" netCash="-953.40" buySell="BUY" orderType="LMT" exchange="IBKRATS" fifoPnlRealized="0" openCloseIndicator="O"/>
+<Trade accountId="U7654321" assetCategory="STK" symbol="MXL" description="MAXLINEAR INC" conid="266143774" listingExchange="NASDAQ" currency="USD" fxRateToBase="1" tradeID="7001003" ibExecID="00030f00.6a3949f9.01.01" ibOrderID="5335584853" dateTime="2026-06-22;13:48:55" quantity="-10" tradePrice="96.695" tradeMoney="-966.95" proceeds="966.95" ibCommission="-1.5" ibCommissionCurrency="USD" netCash="965.45" buySell="SELL" orderType="MKT" exchange="DARK" fifoPnlRealized="9.55" openCloseIndicator="C"/>
+</Trades>
+<CashTransactions>
+<CashTransaction accountId="U7654321" transactionID="9001001" type="Deposits/Withdrawals" amount="10000" currency="ILS" fxRateToBase="0.30078" dateTime="2026-02-17;10:00:00" settleDate="2026-02-17" description="CASH RECEIPT"/>
+<CashTransaction accountId="U7654321" transactionID="9001002" type="Dividends" amount="3.40" currency="USD" fxRateToBase="1" dateTime="2026-05-20;00:00:00" settleDate="2026-05-20" conid="266143774" symbol="MXL" assetCategory="STK" description="MXL CASH DIVIDEND"/>
+<CashTransaction accountId="U7654321" transactionID="9001003" type="Withholding Tax" amount="-0.85" currency="USD" fxRateToBase="1" dateTime="2026-05-20;00:00:00" settleDate="2026-05-20" conid="266143774" symbol="MXL" assetCategory="STK" description="MXL WITHHOLDING TAX"/>
+<CashTransaction accountId="U7654321" transactionID="9001004" type="Broker Interest Paid" amount="-2.31" currency="USD" fxRateToBase="1" dateTime="2026-06-03;00:00:00" settleDate="2026-06-03" description="USD DEBIT INT"/>
+</CashTransactions>
+<EquitySummaryInBase>
+<EquitySummaryByReportDateInBase accountId="U7654321" reportDate="2026-02-17" total="3008.30" cash="3008.30" stock="0" dividendAccruals="0" interestAccruals="0"/>
+<EquitySummaryByReportDateInBase accountId="U7654321" reportDate="2026-02-18" total="2996.90" cash="3008.30" stock="-11.40" dividendAccruals="0" interestAccruals="0"/>
+<EquitySummaryByReportDateInBase accountId="U7654321" reportDate="2026-06-15" total="3471.26" cash="2371.18" stock="1100.08" dividendAccruals="0" interestAccruals="-2.31"/>
+</EquitySummaryInBase>
+<OpenPositions>
+<OpenPosition accountId="U7654321" reportDate="2026-07-11" assetCategory="STK" symbol="SNEX" description="STONEX GROUP INC" conid="431495220" listingExchange="NASDAQ" currency="USD" position="8" markPrice="117.18" costBasisPrice="137.6975"/>
+</OpenPositions>
+<CorporateActions>
+<CorporateAction accountId="U7654321" actionID="8001001" type="FS" conid="431495220" symbol="SNEX" reportDate="2026-03-20" exDate="2026-03-20" payDate="2026-03-21" actionDescription="SNEX SPLIT 3 FOR 2" assetCategory="STK" currency="USD"/>
+</CorporateActions>
+<ConversionRates>
+<ConversionRate reportDate="2026-02-17" fromCurrency="ILS" toCurrency="USD" rate="0.30078"/>
+<ConversionRate reportDate="2026-07-11" fromCurrency="ILS" toCurrency="USD" rate="0.33050"/>
+</ConversionRates>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>
