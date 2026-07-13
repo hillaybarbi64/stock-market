@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectionStatus } from "@/components/layout/connection-status";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { useLiveUpdates } from "@/lib/ws";
 
 const NAV = [
   { href: "/", label: "סקירה כללית" },
@@ -21,6 +22,7 @@ const NAV = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  useLiveUpdates();
 
   return (
     <div className="flex min-h-dvh">
