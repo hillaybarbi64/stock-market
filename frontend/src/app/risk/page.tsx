@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Panel } from "@/components/ui/panel";
+import { StatRail, StatCell } from "@/components/ui/stat-rail";
 import { Num, Sym } from "@/components/ui/num";
 import { apiGet } from "@/lib/api";
 
@@ -72,30 +73,30 @@ export default function RiskPage() {
   const ccy = e.base_currency;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="space-y-3">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-[17px] font-semibold tracking-tight">סיכונים</h1>
+        <h1 className="t-h1">סיכונים</h1>
         {data.stale && (
-          <span className="sym rounded-sm bg-subtle px-1.5 py-px text-[9.5px] text-warn">
-            LAST KNOWN · STALE
-          </span>
+          <span className="tag tag--warn">LAST KNOWN · STALE</span>
         )}
       </div>
 
-      <Panel title="חשיפה">
-        <div className="grid grid-cols-3 gap-x-6 gap-y-4 sm:grid-cols-4 lg:grid-cols-8">
-          <S label="ברוטו" v={e.gross_exposure} ccy={ccy} />
-          <S label="נטו" v={e.net_exposure} ccy={ccy} />
-          <S label="Long" v={e.long_exposure} ccy={ccy} />
-          <S label="Short" v={e.short_exposure} ccy={ccy} />
-          <SP label="מינוף ברוטו" v={e.gross_leverage} x />
-          <SP label="מזומן מהתיק" v={e.cash_pct} />
-          <SP label="ניצול מרג'ין" v={e.margin_utilization} />
-          <SP label="ריכוזיות Top-5" v={e.top5_concentration} />
-        </div>
+      <Panel title="חשיפה" subtitle="Exposure" padding="none">
+        <StatRail cols="grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
+          <StatCell label="ברוטו" en="Gross"><Num value={e.gross_exposure} currency={ccy} /></StatCell>
+          <StatCell label="נטו" en="Net"><Num value={e.net_exposure} currency={ccy} /></StatCell>
+          <StatCell label="לונג" en="Long"><Num value={e.long_exposure} currency={ccy} /></StatCell>
+          <StatCell label="שורט" en="Short"><Num value={e.short_exposure} currency={ccy} /></StatCell>
+          <StatCell label="מינוף" en="Leverage">
+            {e.gross_leverage == null ? <span className="text-faint">—</span> : <span className="num">{e.gross_leverage.toFixed(2)}×</span>}
+          </StatCell>
+          <StatCell label="מזומן" en="Cash %"><PctOrDash v={e.cash_pct} /></StatCell>
+          <StatCell label="ניצול מרג'ין" en="Margin"><PctOrDash v={e.margin_utilization} /></StatCell>
+          <StatCell label="ריכוז Top-5" en="Conc."><PctOrDash v={e.top5_concentration} /></StatCell>
+        </StatRail>
       </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <Panel title="משקלי פוזיציות">
           {e.positions.length ? (
             <ul className="space-y-1.5">
@@ -185,28 +186,6 @@ export default function RiskPage() {
   );
 }
 
-function S({ label, v, ccy }: { label: string; v: number; ccy: string }) {
-  return (
-    <div>
-      <div className="text-[11px] text-faint">{label}</div>
-      <div className="mt-0.5 text-[15px] font-semibold"><Num value={v} currency={ccy} /></div>
-    </div>
-  );
-}
-
-function SP({ label, v, x }: { label: string; v: number | null; x?: boolean }) {
-  return (
-    <div>
-      <div className="text-[11px] text-faint">{label}</div>
-      <div className="mt-0.5 text-[15px] font-semibold">
-        {v == null ? (
-          <span className="text-faint">—</span>
-        ) : x ? (
-          <span className="num">{v.toFixed(2)}×</span>
-        ) : (
-          <Num value={v} asPct />
-        )}
-      </div>
-    </div>
-  );
+function PctOrDash({ v }: { v: number | null }) {
+  return v == null ? <span className="text-faint">—</span> : <Num value={v} asPct />;
 }
