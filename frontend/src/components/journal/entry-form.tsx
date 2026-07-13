@@ -7,7 +7,7 @@ import { Sym } from "@/components/ui/num";
 import { apiGet } from "@/lib/api";
 
 interface EntryPayload {
-  cycle_id: number;
+  cycle_id: number | null;
   strategy: string | null;
   setup: string | null;
   catalyst: string | null;
@@ -31,30 +31,42 @@ interface EntryPayload {
   template_id: number | null;
 }
 
-interface ExistingEntry extends EntryPayload {
+export interface ExistingEntry extends EntryPayload {
   id: number;
+  entry_date?: string;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const EMOTIONS = ["רגוע", "בטוח", "לחוץ", "חמדני", "פוחד להחמיץ", "מתוסכל", "עייף", "נקמני"];
 
-export function JournalEntryForm({ cycle, onClose }: { cycle: CycleRow; onClose: () => void }) {
+export function JournalEntryForm({
+  cycle = null,
+  entry: entryProp = null,
+  onClose,
+}: {
+  /** attach the entry to a trade cycle; null for a standalone entry */
+  cycle?: CycleRow | null;
+  /** edit an existing entry directly (e.g. from the entries list) */
+  entry?: ExistingEntry | null;
+  onClose: () => void;
+}) {
+  // Only look up the cycle's existing entry when editing a cycle in-place and
+  // no entry was handed in. Standalone/new entries skip the query entirely.
   const existing = useQuery({
-    queryKey: ["journal", "entry", cycle.id],
-    queryFn: () => apiGet<{ entries: ExistingEntry[] }>(`/journal/entries?cycle_id=${cycle.id}`),
+    queryKey: ["journal", "entry", cycle?.id],
+    queryFn: () => apiGet<{ entries: ExistingEntry[] }>(`/journal/entries?cycle_id=${cycle!.id}`),
+    enabled: !!cycle && !entryProp,
   });
 
-  if (existing.isLoading) {
+  if (cycle && !entryProp && existing.isLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="widget px-6 py-4 text-[12.5px] text-muted">
-          טוען רשומה…
-        </div>
+        <div className="widget px-6 py-4 text-[12.5px] text-muted">טוען רשומה…</div>
       </div>
     );
   }
-  return <FormInner cycle={cycle} entry={existing.data?.entries[0]} onClose={onClose} />;
+  return <FormInner cycle={cycle} entry={entryProp ?? existing.data?.entries[0]} onClose={onClose} />;
 }
 
 function FormInner({
@@ -62,7 +74,7 @@ function FormInner({
   entry,
   onClose,
 }: {
-  cycle: CycleRow;
+  cycle: CycleRow | null;
   entry: ExistingEntry | undefined;
   onClose: () => void;
 }) {
@@ -75,7 +87,7 @@ function FormInner({
 
   const save = useMutation({
     mutationFn: async () => {
-      const payload = { ...form, cycle_id: cycle.id };
+      const payload = { ...form, cycle_id: cycle?.id ?? entry?.cycle_id ?? null };
       const url = entry
         ? `${API_URL}/api/journal/entries/${entry.id}`
         : `${API_URL}/api/journal/entries`;
@@ -101,10 +113,19 @@ function FormInner({
       >
         <header className="sticky top-0 flex items-center justify-between border-b border-line bg-panel px-4 py-3">
           <h2 className="text-[14px] font-semibold">
-            רשומת יומן · <Sym>{cycle.symbol}</Sym>{" "}
-            <span className="text-[11px] font-normal text-faint">
-              {cycle.direction} · {new Date(cycle.open_time).toLocaleDateString("he-IL")}
-            </span>
+            {cycle ? (
+              <>
+                רשומת יומן · <Sym>{cycle.symbol}</Sym>{" "}
+                <span className="text-[11px] font-normal text-faint">
+                  {cycle.direction} · {new Date(cycle.open_time).toLocaleDateString("he-IL")}
+                </span>
+              </>
+            ) : (
+              <>
+                רשומת יומן{" "}
+                <span className="text-[11px] font-normal text-faint">עצמאית · ללא מחזור עסקה</span>
+              </>
+            )}
           </h2>
           <button type="button" onClick={onClose} className="text-[12px] text-muted hover:text-fg">
             סגור
