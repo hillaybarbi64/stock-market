@@ -24,14 +24,18 @@ export default function PositionsPage() {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-[17px] font-semibold tracking-tight">פוזיציות</h1>
-        <SourceBadge source={positions.data?.source} stale={positions.data?.stale} />
-      </div>
-      <Panel>
+    <div className="space-y-3.5">
+      <Panel
+        title="פוזיציות פתוחות"
+        actions={
+          <div className="flex items-center gap-3 text-[11px] text-faint">
+            {positions.data && <span>{positions.data.positions?.length ?? 0} פוזיציות</span>}
+            <SourceBadge source={positions.data?.source} stale={positions.data?.stale} />
+          </div>
+        }
+      >
         {positions.isLoading ? (
-          <div className="h-32 rounded-sm skeleton" />
+          <div className="h-32 rounded-lg skeleton" />
         ) : (
           <PositionsTable positions={positions.data?.positions ?? []} nlv={nlv} />
         )}
