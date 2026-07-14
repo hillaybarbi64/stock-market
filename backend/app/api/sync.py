@@ -1,6 +1,7 @@
 """Sync endpoints: status, manual trigger, reconciliation."""
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -58,8 +59,11 @@ async def sync_status(db: DbSession) -> dict:
     }
 
 
+_MIN_SECONDS_BETWEEN_RUNS = 90
+
+
 @router.post("/run")
-async def run_sync() -> dict:
+async def run_sync(db: DbSession) -> dict:
     svc = registry.flex_sync
     if svc is None or not svc.is_configured:
         return {
@@ -67,7 +71,23 @@ async def run_sync() -> dict:
             "detail": "Flex אינו מוגדר — יש להזין IBKR_FLEX_TOKEN ו-IBKR_FLEX_QUERY_ID בקובץ .env (ראו RUNBOOK §3)",
         }
     if svc._running:
-        return {"started": False, "detail": "סנכרון כבר רץ"}
+        return {"started": False, "detail": "סנכרון כבר רץ — המתן שיסתיים (עד ~3 דקות)"}
+
+    # Anti-hammer: IBKR temporarily locks the token (error 1025) after too many
+    # rapid attempts. Refuse a new run within 90s of the previous one so a
+    # frustrated double/triple-click can't cause that lock.
+    last = (
+        await db.execute(select(SyncRun).order_by(desc(SyncRun.started_at)).limit(1))
+    ).scalar_one_or_none()
+    if last is not None:
+        ref = last.finished_at or last.started_at
+        elapsed = (datetime.now(UTC) - ref).total_seconds() if ref else _MIN_SECONDS_BETWEEN_RUNS
+        if elapsed < _MIN_SECONDS_BETWEEN_RUNS:
+            return {
+                "started": False,
+                "detail": f"סנכרון רץ לפני רגע — המתן ~{int(_MIN_SECONDS_BETWEEN_RUNS - elapsed)} שניות "
+                "לפני ניסיון נוסף (מונע חסימה זמנית של IBKR).",
+            }
 
     async def _run() -> None:
         try:

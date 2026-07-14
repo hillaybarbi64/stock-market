@@ -51,8 +51,8 @@ class FlexClient:
         poll_interval_s: float = 5.0,
         max_polls: int = 24,
         timeout_s: float = 60.0,
-        send_retries: int = 5,
-        send_retry_wait_s: float = 20.0,
+        send_retries: int = 8,
+        send_retry_wait_s: float = 30.0,
     ) -> None:
         if not token or not query_id:
             raise ValueError("Flex token and query id are required (see RUNBOOK.md §3)")
