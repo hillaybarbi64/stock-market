@@ -97,3 +97,70 @@ wait_http() {
   echo "    WARNING: ${label} not ready after ${wait_s}s — check: docker compose logs" >&2
   return 1
 }
+
+# True if something is listening on 127.0.0.1:$1 (or *:$1).
+port_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  if command -v nc >/dev/null 2>&1; then
+    nc -z 127.0.0.1 "$port" >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+# Kill host listeners on a TCP port (macOS/Linux). Used for stale uvicorn/next/docker-proxy.
+kill_port_listeners() {
+  local port="$1"
+  local pids=""
+  if ! command -v lsof >/dev/null 2>&1; then
+    return 0
+  fi
+  pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u || true)"
+  if [[ -z "$pids" ]]; then
+    return 0
+  fi
+  echo "    freeing :$port (PIDs: $(echo "$pids" | tr '\n' ' '))"
+  # TERM first, then KILL stragglers.
+  # shellcheck disable=SC2086
+  kill $pids 2>/dev/null || true
+  sleep 1
+  pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u || true)"
+  if [[ -n "$pids" ]]; then
+    # shellcheck disable=SC2086
+    kill -9 $pids 2>/dev/null || true
+    sleep 1
+  fi
+}
+
+# Release ports this stack needs (3000/8000/5432) before compose up.
+# 1) stop our compose project  2) kill leftover host listeners on app ports.
+free_app_ports() {
+  echo "==> Freeing ports for this stack (3000, 8000, 5432)"
+  # Stop any previous ibkr-dashboard containers so they release published ports.
+  docker compose down --remove-orphans >/dev/null 2>&1 || true
+
+  local port
+  for port in 3000 8000 5432; do
+    if port_in_use "$port"; then
+      kill_port_listeners "$port"
+    fi
+  done
+
+  local busy=0
+  for port in 3000 8000 5432; do
+    if port_in_use "$port"; then
+      echo "    WARNING: :$port still busy after cleanup" >&2
+      if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sed 's/^/      /' >&2 || true
+      fi
+      busy=1
+    else
+      echo "    :$port free"
+    fi
+  done
+  return 0
+}
