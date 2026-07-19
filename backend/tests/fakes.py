@@ -68,6 +68,9 @@ class FakeIB:
     def fills(self):
         return []
 
+    async def reqExecutionsAsync(self, _filter):
+        return []
+
     def pnl(self):
         return []
 

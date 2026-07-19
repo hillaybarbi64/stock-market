@@ -41,11 +41,26 @@ class SyncAlreadyRunning(RuntimeError):
 class FlexSyncService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._token = (settings.ibkr_flex_token or "").strip()
+        self._query_id = (settings.ibkr_flex_query_id or "").strip()
         self._running = False
 
     @property
     def is_configured(self) -> bool:
-        return bool(self._settings.ibkr_flex_token and self._settings.ibkr_flex_query_id)
+        return bool(self._token and self._query_id)
+
+    @property
+    def token(self) -> str:
+        return self._token
+
+    @property
+    def query_id(self) -> str:
+        return self._query_id
+
+    def set_credentials(self, token: str, query_id: str) -> None:
+        """Hot-reload credentials (from UI/DB) without restarting the process."""
+        self._token = (token or "").strip()
+        self._query_id = (query_id or "").strip()
 
     async def run(self, trigger: str = "manual") -> int:
         """Full sync flow. Returns the sync_run id."""
@@ -66,8 +81,8 @@ class FlexSyncService:
 
         try:
             client = FlexClient(
-                token=self._settings.ibkr_flex_token,
-                query_id=self._settings.ibkr_flex_query_id,
+                token=self._token,
+                query_id=self._query_id,
             )
             statement = await client.fetch_statement()
             report = parse_flex_report(statement.xml)
@@ -88,6 +103,14 @@ class FlexSyncService:
                 )
                 await session.commit()
             log.info("flex_sync_ok", run_id=run_id, **counts)
+            # Journal / performance views need FIFO cycles — rebuild after history lands.
+            try:
+                from app.services.trade_cycles import rebuild_cycles
+
+                cycle_counts = await rebuild_cycles()
+                log.info("cycles_rebuilt_after_flex", run_id=run_id, **cycle_counts)
+            except Exception:  # noqa: BLE001 — sync itself succeeded; cycles can be rebuilt manually
+                log.exception("cycles_rebuild_after_flex_failed", run_id=run_id)
             return run_id
         except Exception as exc:
             async with db_session() as session:

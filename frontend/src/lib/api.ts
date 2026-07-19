@@ -20,6 +20,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const apiGet = <T>(path: string) => request<T>(path);
 export const apiPost = <T>(path: string) => request<T>(path, { method: "POST" });
+export const apiPut = <T>(path: string, body: unknown) =>
+  request<T>(path, {
+    method: "PUT",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 // ── types ────────────────────────────────────────────────
 

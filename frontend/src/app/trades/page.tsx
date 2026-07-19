@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 import { Panel } from "@/components/ui/panel";
 import { Num, Sym } from "@/components/ui/num";
@@ -49,6 +50,16 @@ export default function TradesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["trades", symbol, dateFrom, dateTo, page],
     queryFn: () => apiGet<TradesResponse>(`/trades?${params.toString()}`),
+  });
+  const syncStatus = useQuery({
+    queryKey: ["sync", "status"],
+    queryFn: () =>
+      apiGet<{
+        configured: boolean;
+        running: boolean;
+        totals: { executions: number };
+        runs: { status: string }[];
+      }>("/sync/status"),
   });
 
   const exportCsv = () => {
@@ -124,9 +135,27 @@ export default function TradesPage() {
         ) : !data?.trades.length ? (
           <div className="py-10 text-center">
             <p className="text-[13.5px] font-medium">אין עסקאות להצגה</p>
-            <p className="mt-1 text-[12.5px] text-muted">
-              עסקאות יופיעו לאחר סנכרון Flex או קליטה חיה מה־Gateway.
-            </p>
+            {!syncStatus.data?.configured ? (
+              <p className="mx-auto mt-2 max-w-md text-[12.5px] leading-relaxed text-muted">
+                עסקאות עבר מגיעות מ־Flex, לא מה־Gateway החי.{" "}
+                <Link href="/sync" className="text-accent underline-offset-2 hover:underline">
+                  עבור לסנכרון
+                </Link>
+                , הזן Token + Query ID, והרץ סנכרון.
+              </p>
+            ) : syncStatus.data.running ? (
+              <p className="mt-2 text-[12.5px] text-muted">סנכרון Flex רץ עכשיו — העסקאות יופיעו כשיסתיים.</p>
+            ) : syncStatus.data.totals.executions === 0 ? (
+              <p className="mx-auto mt-2 max-w-md text-[12.5px] leading-relaxed text-muted">
+                Flex מוגדר אבל עדיין אין executions.{" "}
+                <Link href="/sync" className="text-accent underline-offset-2 hover:underline">
+                  הרץ סנכרון
+                </Link>{" "}
+                או בדוק שנכשלה ריצה אחרונה.
+              </p>
+            ) : (
+              <p className="mt-1 text-[12.5px] text-muted">אין תוצאות לסינון הנוכחי.</p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

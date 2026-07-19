@@ -1,10 +1,11 @@
-"""Sync endpoints: status, manual trigger, reconciliation."""
+"""Sync endpoints: status, manual trigger, reconciliation, Flex credentials."""
 
 import asyncio
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,10 +14,61 @@ from app.db.base import get_db
 from app.db.models import CashTransaction, DailyEquity, Execution, Position, SyncRun
 from app.ibkr.types import GatewayState
 from app.services import registry
+from app.services.flex_credentials import mask_token, save_flex_credentials
 
 log = get_logger(__name__)
 router = APIRouter()
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+
+class FlexConfigBody(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+    query_id: str = Field(min_length=1, max_length=64)
+    run_sync_now: bool = True
+
+
+@router.get("/flex-config")
+async def get_flex_config() -> dict:
+    svc = registry.flex_sync
+    configured = bool(svc and svc.is_configured)
+    return {
+        "configured": configured,
+        "query_id": svc.query_id if svc and svc.is_configured else "",
+        "token_hint": mask_token(svc.token) if svc and svc.is_configured else "",
+    }
+
+
+@router.put("/flex-config")
+async def put_flex_config(body: FlexConfigBody) -> dict:
+    """Save Flex credentials (DB) and optionally kick off the first history sync."""
+    svc = registry.flex_sync
+    if svc is None:
+        return {"ok": False, "detail": "Flex sync service not started", "sync_started": False}
+
+    await save_flex_credentials(body.token, body.query_id)
+    svc.set_credentials(body.token, body.query_id)
+
+    sync_started = False
+    detail = "נשמר. אפשר להריץ סנכרון מהכפתור למעלה."
+    if body.run_sync_now and svc.is_configured and not svc._running:
+        async def _run() -> None:
+            try:
+                await svc.run(trigger="flex_config_save")
+            except Exception:  # noqa: BLE001
+                log.exception("flex_config_triggered_sync_failed")
+
+        asyncio.create_task(_run())
+        sync_started = True
+        detail = "נשמר — סנכרון היסטוריה התחיל ברקע (עד כמה דקות)."
+
+    return {
+        "ok": True,
+        "configured": svc.is_configured,
+        "sync_started": sync_started,
+        "detail": detail,
+        "token_hint": mask_token(svc.token),
+        "query_id": svc.query_id,
+    }
 
 
 @router.get("/status")
@@ -68,7 +120,7 @@ async def run_sync(db: DbSession) -> dict:
     if svc is None or not svc.is_configured:
         return {
             "started": False,
-            "detail": "Flex אינו מוגדר — יש להזין IBKR_FLEX_TOKEN ו-IBKR_FLEX_QUERY_ID בקובץ .env (ראו RUNBOOK §3)",
+            "detail": "Flex אינו מוגדר — הזן Token ו-Query ID בטופס למטה (או ב-.env) ואז הרץ סנכרון",
         }
     if svc._running:
         return {"started": False, "detail": "סנכרון כבר רץ — המתן שיסתיים (עד ~3 דקות)"}

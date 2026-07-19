@@ -1,8 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Panel } from "@/components/ui/panel";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
 
 interface SyncRunRow {
   id: number;
@@ -29,6 +31,12 @@ interface SyncStatus {
   runs: SyncRunRow[];
 }
 
+interface FlexConfig {
+  configured: boolean;
+  query_id: string;
+  token_hint: string;
+}
+
 interface ReconCheck {
   name: string;
   status: string;
@@ -43,6 +51,10 @@ export default function SyncPage() {
     queryFn: () => apiGet<SyncStatus>("/sync/status"),
     refetchInterval: (q) => (q.state.data?.running ? 2_000 : 15_000),
   });
+  const flexConfig = useQuery({
+    queryKey: ["sync", "flex-config"],
+    queryFn: () => apiGet<FlexConfig>("/sync/flex-config"),
+  });
   const recon = useQuery({
     queryKey: ["sync", "reconciliation"],
     queryFn: () => apiGet<{ checks: ReconCheck[] }>("/sync/reconciliation"),
@@ -52,6 +64,28 @@ export default function SyncPage() {
     mutationFn: () => apiPost<{ started: boolean; detail?: string }>("/sync/run"),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sync"] }),
   });
+
+  const [token, setToken] = useState("");
+  const [queryId, setQueryId] = useState("");
+  const saveFlex = useMutation({
+    mutationFn: () =>
+      apiPut<{
+        ok: boolean;
+        detail?: string;
+        sync_started?: boolean;
+      }>("/sync/flex-config", { token, query_id: queryId, run_sync_now: true }),
+    onSuccess: () => {
+      setToken("");
+      queryClient.invalidateQueries({ queryKey: ["sync"] });
+      queryClient.invalidateQueries({ queryKey: ["trades"] });
+    },
+  });
+
+  useEffect(() => {
+    if (flexConfig.data?.query_id && !queryId) {
+      setQueryId(flexConfig.data.query_id);
+    }
+  }, [flexConfig.data?.query_id, queryId]);
 
   const s = status.data;
 
@@ -69,18 +103,67 @@ export default function SyncPage() {
         </button>
       </div>
 
-      {s && !s.configured && (
-        <Panel>
-          <p className="text-[13px] font-medium text-warn">Flex Web Service אינו מוגדר</p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-muted">
-            כדי לסנכרן את כל ההיסטוריה (עסקאות, דיבידנדים, עמלות, הפקדות, NAV יומי) יש
-            להגדיר Flex Query וטוקן בפורטל של IBKR ולהזין{" "}
-            <span className="sym">IBKR_FLEX_TOKEN</span> ו־
-            <span className="sym">IBKR_FLEX_QUERY_ID</span> בקובץ .env — הוראות מלאות
-            ב־RUNBOOK סעיף 3.
+      <Panel title="הגדרת Flex (היסטוריית עסקאות)" subtitle="Activity Flex Query">
+        <p className="mb-3 text-[12.5px] leading-relaxed text-muted">
+          Gateway החי מביא פוזיציות ו־P&amp;L עדכניים בלבד.{" "}
+          <strong className="font-medium text-fg">עסקאות עבר</strong> מגיעות מ־Flex Web
+          Service. צור Token + Activity Flex Query בפורטל IBKR (ראו RUNBOOK §3), הדבק כאן,
+          ושמור — הסנכרון יתחיל אוטומטית.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block text-[11px] text-faint">
+            Flex Token
+            <input
+              type="password"
+              autoComplete="off"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={
+                flexConfig.data?.token_hint
+                  ? `שמור (${flexConfig.data.token_hint})`
+                  : "הדבק Token מהפורטל"
+              }
+              className="sym mt-1 block w-64 rounded-sm border border-line bg-bg px-2 py-1.5 text-[12px] outline-none focus:border-line-strong"
+              dir="ltr"
+            />
+          </label>
+          <label className="block text-[11px] text-faint">
+            Query ID
+            <input
+              value={queryId}
+              onChange={(e) => setQueryId(e.target.value.trim())}
+              placeholder="123456"
+              className="num mt-1 block w-36 rounded-sm border border-line bg-bg px-2 py-1.5 text-[12px] outline-none focus:border-line-strong"
+              dir="ltr"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!token || !queryId || saveFlex.isPending}
+            onClick={() => saveFlex.mutate()}
+            className="rounded-sm border border-line bg-panel px-3 py-1.5 text-[12px] font-medium transition-colors hover:bg-hover disabled:opacity-40"
+          >
+            {saveFlex.isPending ? "שומר…" : "שמור והפעל סנכרון"}
+          </button>
+        </div>
+        {flexConfig.data?.configured && (
+          <p className="mt-2 text-[11.5px] text-gain">
+            Flex מוגדר · Query <span className="num" dir="ltr">{flexConfig.data.query_id}</span>
+            {flexConfig.data.token_hint ? (
+              <>
+                {" "}
+                · Token <span className="sym" dir="ltr">{flexConfig.data.token_hint}</span>
+              </>
+            ) : null}
           </p>
-        </Panel>
-      )}
+        )}
+        {saveFlex.data?.detail && (
+          <p className="mt-2 text-[12px] text-muted">{saveFlex.data.detail}</p>
+        )}
+        {saveFlex.isError && (
+          <p className="mt-2 text-[12px] text-loss">שמירה נכשלה — בדוק את הערכים ונסה שוב.</p>
+        )}
+      </Panel>
 
       {runSync.data && !runSync.data.started && (
         <p className="rounded-sm bg-subtle px-3 py-2 text-[12px] text-warn">
@@ -99,6 +182,14 @@ export default function SyncPage() {
                 ? `${s.totals.equity_days_from} → ${s.totals.equity_days_to}`
                 : "—"}
             </dd>
+          </div>
+          <div className="flex items-end">
+            <Link
+              href="/trades"
+              className="text-[12px] text-accent underline-offset-2 hover:underline"
+            >
+              מעבר לבלוטר עסקאות →
+            </Link>
           </div>
         </dl>
       </Panel>
@@ -179,8 +270,8 @@ export default function SyncPage() {
           </table>
         ) : (
           <p className="py-4 text-center text-[12.5px] text-muted">
-            טרם בוצע סנכרון. לאחר הגדרת Flex, הריצה הראשונה תמשוך את כל ההיסטוריה מאז
-            פתיחת החשבון.
+            טרם בוצע סנכרון. לאחר שמירת Flex למעלה, הריצה הראשונה תמשוך את ההיסטוריה לפי
+            טווח ה־Query (בדרך כלל ~365 יום).
           </p>
         )}
       </Panel>
