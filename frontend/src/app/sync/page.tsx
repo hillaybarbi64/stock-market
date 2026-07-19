@@ -22,6 +22,12 @@ interface SyncRunRow {
 interface SyncStatus {
   configured: boolean;
   running: boolean;
+  last_failure: {
+    code: string | null;
+    error: string | null;
+    help_he: string | null;
+    started_at: string;
+  } | null;
   totals: {
     executions: number;
     cash_transactions: number;
@@ -60,6 +66,11 @@ export default function SyncPage() {
     queryFn: () => apiGet<{ checks: ReconCheck[] }>("/sync/reconciliation"),
     refetchInterval: 60_000,
   });
+  const outboundIp = useQuery({
+    queryKey: ["sync", "outbound-ip"],
+    queryFn: () => apiGet<{ ip: string | null; ok: boolean }>("/sync/outbound-ip"),
+    staleTime: 60_000,
+  });
   const runSync = useMutation({
     mutationFn: () => apiPost<{ started: boolean; detail?: string }>("/sync/run"),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sync"] }),
@@ -88,6 +99,10 @@ export default function SyncPage() {
   }, [flexConfig.data?.query_id, queryId]);
 
   const s = status.data;
+  const fail = s?.last_failure;
+  const isIpBlock =
+    fail?.code === "1013" ||
+    (typeof fail?.error === "string" && fail.error.includes("1013"));
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -102,6 +117,43 @@ export default function SyncPage() {
           {s?.running ? "סנכרון רץ…" : "הרץ סנכרון עכשיו"}
         </button>
       </div>
+
+      {fail && s?.totals.executions === 0 && (
+        <div
+          className="rounded-sm border border-[color-mix(in_srgb,var(--warn)_40%,transparent)] bg-[color-mix(in_srgb,var(--warn)_10%,transparent)] px-4 py-3"
+          role="alert"
+        >
+          <p className="text-[13px] font-semibold text-warn">
+            סנכרון נכשל{fail.code ? ` · קוד ${fail.code}` : ""}
+          </p>
+          {fail.error && (
+            <p className="sym mt-1 text-[11.5px] text-muted" dir="ltr">
+              {fail.error}
+            </p>
+          )}
+          {fail.help_he && (
+            <p className="mt-2 text-[12.5px] leading-relaxed text-fg">{fail.help_he}</p>
+          )}
+          {isIpBlock && (
+            <div className="mt-3 space-y-1.5 text-[12.5px] leading-relaxed">
+              <p>
+                כתובת ה־IP הציבורית שממנה רץ הסנכרון עכשיו:{" "}
+                <span className="num font-semibold" dir="ltr">
+                  {outboundIp.data?.ip ?? "…טוען"}
+                </span>
+              </p>
+              <ol className="list-decimal space-y-1 pe-5 text-muted">
+                <li>היכנס ל־IBKR Client Portal</li>
+                <li>Settings → Account Settings → Flex Web Service</li>
+                <li>
+                  הוסף את ה־IP למעלה לרשימת הכתובות המורשות (או צור Token חדש עם ה־IP הנוכחי)
+                </li>
+                <li>חזור לכאן → המתן ~90 שניות → לחץ «הרץ סנכרון עכשיו»</li>
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
 
       <Panel title="הגדרת Flex (היסטוריית עסקאות)" subtitle="Activity Flex Query">
         <p className="mb-3 text-[12.5px] leading-relaxed text-muted">
@@ -261,8 +313,17 @@ export default function SyncPage() {
                   </td>
                   <td className="num py-1.5 text-end">{r.records_upserted}</td>
                   <td className="num py-1.5 text-end">{r.records_skipped}</td>
-                  <td className="py-1.5 text-[11px] text-faint" dir="ltr">
-                    {r.errors && "error" in r.errors ? String(r.errors.error) : ""}
+                  <td className="py-1.5 text-[11px] text-faint">
+                    {r.errors && "error" in r.errors ? (
+                      <span dir="ltr">{String(r.errors.error)}</span>
+                    ) : (
+                      ""
+                    )}
+                    {r.errors && "help_he" in r.errors && r.errors.help_he ? (
+                      <span className="mt-0.5 block text-[10.5px] text-muted">
+                        {String(r.errors.help_he)}
+                      </span>
+                    ) : null}
                   </td>
                 </tr>
               ))}

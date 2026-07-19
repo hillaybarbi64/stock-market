@@ -113,14 +113,22 @@ class FlexSyncService:
                 log.exception("cycles_rebuild_after_flex_failed", run_id=run_id)
             return run_id
         except Exception as exc:
+            from app.ibkr.flex_help import explain_flex_error
+
+            explained = explain_flex_error(exc)
             async with db_session() as session:
                 run = await session.get(SyncRun, run_id)
                 if run is not None:
                     run.finished_at = datetime.now(UTC)
                     run.status = "failed"
-                    run.errors = {"error": f"{type(exc).__name__}: {exc}", "trigger": trigger}
+                    run.errors = {
+                        "error": explained["message"],
+                        "code": explained["code"],
+                        "help_he": explained["help_he"],
+                        "trigger": trigger,
+                    }
                     await session.commit()
-            log.exception("flex_sync_failed", run_id=run_id)
+            log.exception("flex_sync_failed", run_id=run_id, flex_code=explained["code"])
             raise
 
     # ── ingestion (idempotent) ───────────────────────────
