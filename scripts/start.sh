@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Full bring-up: .env → Docker Desktop → free ports → build/start → wait → open UI.
-# Idempotent. Safe to re-run. This is the single command that should get you to :3000.
+# Full bring-up. Idempotent. Does NOT tear down a healthy stack.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -11,14 +10,53 @@ echo "==> IBKR dashboard bring-up"
 
 ensure_env_file
 ensure_docker
+
+stack_healthy() {
+  curl -fsS --connect-timeout 1 http://127.0.0.1:8000/api/system/health >/dev/null 2>&1 \
+    && curl -fsS --connect-timeout 1 http://127.0.0.1:3000/ >/dev/null 2>&1
+}
+
+print_status() {
+  echo ""
+  echo "==> Status"
+  if curl -fsS --connect-timeout 2 http://127.0.0.1:8000/api/system/health >/dev/null 2>&1; then
+    echo "    health:     $(curl -fsS http://127.0.0.1:8000/api/system/health)"
+    echo "    connection: $(curl -fsS http://127.0.0.1:8000/api/system/connection)"
+  else
+    echo "    backend DOWN"
+    docker compose ps 2>/dev/null || true
+    echo "    --- backend logs ---"
+    docker compose logs --tail=60 backend 2>/dev/null || true
+    echo "    --- frontend logs ---"
+    docker compose logs --tail=40 frontend 2>/dev/null || true
+  fi
+  if command -v nc >/dev/null 2>&1; then
+    if nc -z 127.0.0.1 4001 >/dev/null 2>&1; then
+      echo "    IB Gateway: port 4001 is open"
+    else
+      echo "    IB Gateway: nothing on :4001 — open IB Gateway for live data"
+    fi
+  fi
+}
+
+if stack_healthy; then
+  echo "==> Stack already healthy — leaving it running"
+  print_status
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    open "http://localhost:3000" 2>/dev/null || true
+  fi
+  echo ""
+  echo "Dashboard: http://localhost:3000"
+  exit 0
+fi
+
+# Only free ports when the stack is not already serving.
+# Avoids needlessly taking a working dashboard down on every start.sh.
 free_app_ports
 
 compose_up() {
-  # Prefer --wait when available; fall back to plain up.
-  if docker compose up -d --build --wait; then
-    return 0
-  fi
-  echo "    compose --wait failed — retrying plain up…"
+  # Avoid compose --wait here: a slow frontend healthcheck was aborting the
+  # whole bring-up even when containers were fine. We poll HTTP ourselves.
   docker compose up -d --build
 }
 
@@ -27,37 +65,33 @@ set +e
 compose_err="$(compose_up 2>&1)"
 compose_rc=$?
 set -e
+printf '%s\n' "$compose_err"
 if [[ $compose_rc -ne 0 ]]; then
-  printf '%s\n' "$compose_err" >&2
   if printf '%s' "$compose_err" | grep -qiE 'address already in use|ports are not available'; then
-    echo "==> Port conflict detected — cleaning again and retrying once"
+    echo "==> Port conflict — cleaning and retrying once"
     free_app_ports
     compose_up
   else
+    echo "==> compose failed" >&2
+    docker compose ps >&2 || true
+    docker compose logs --tail=80 >&2 || true
     exit "$compose_rc"
   fi
 fi
 
 echo "==> Waiting for HTTP endpoints"
-wait_http "http://127.0.0.1:8000/api/system/health" "backend" 120 || true
-wait_http "http://127.0.0.1:3000/" "frontend" 120 || true
+wait_http "http://127.0.0.1:8000/api/system/health" "backend" 180 || true
+wait_http "http://127.0.0.1:3000/" "frontend" 180 || true
 
-echo ""
-echo "==> Status"
-if curl -fsS --connect-timeout 2 http://127.0.0.1:8000/api/system/health >/dev/null 2>&1; then
-  echo "    health:     $(curl -fsS http://127.0.0.1:8000/api/system/health)"
-  echo "    connection: $(curl -fsS http://127.0.0.1:8000/api/system/connection)"
-else
-  echo "    backend still not answering — run: docker compose logs --tail=80 backend"
+# If still down, one recovery attempt (recreate without full image rebuild).
+if ! stack_healthy; then
+  echo "==> Stack not healthy — recreating containers once"
+  docker compose up -d --force-recreate --no-build || true
+  wait_http "http://127.0.0.1:8000/api/system/health" "backend" 120 || true
+  wait_http "http://127.0.0.1:3000/" "frontend" 120 || true
 fi
 
-if command -v nc >/dev/null 2>&1; then
-  if nc -z 127.0.0.1 4001 >/dev/null 2>&1; then
-    echo "    IB Gateway: port 4001 is open"
-  else
-    echo "    IB Gateway: nothing on :4001 — open IB Gateway (Live, Read-Only API) for live data"
-  fi
-fi
+print_status
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   open "http://localhost:3000" 2>/dev/null || true
@@ -67,3 +101,7 @@ echo ""
 echo "Dashboard: http://localhost:3000"
 echo "API docs:  http://localhost:8000/api/docs"
 echo "Diagnose:  ./scripts/doctor.sh"
+
+if ! stack_healthy; then
+  exit 1
+fi

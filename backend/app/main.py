@@ -1,6 +1,7 @@
 """FastAPI application entrypoint."""
 
 import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -35,10 +36,13 @@ async def lifespan(app: FastAPI):
 
     await ensure_builtin_templates()
     # UI-saved Flex credentials override empty/stale env values.
-    db_token, db_query_id = await load_flex_credentials()
-    if db_token and db_query_id:
-        registry.flex_sync.set_credentials(db_token, db_query_id)
-        log.info("flex_credentials_loaded_from_db", query_id=db_query_id)
+    try:
+        db_token, db_query_id = await load_flex_credentials()
+        if db_token and db_query_id:
+            registry.flex_sync.set_credentials(db_token, db_query_id)
+            log.info("flex_credentials_loaded_from_db", query_id=db_query_id)
+    except Exception:  # noqa: BLE001 — never block boot on optional settings row
+        log.exception("flex_credentials_load_failed")
 
     # Flex history sync is independent of the live Gateway connection.
     sync_loop_task = asyncio.create_task(daily_sync_loop(registry.flex_sync))
@@ -48,16 +52,20 @@ async def lifespan(app: FastAPI):
         await registry.supervisor.start()
         log.info("gateway_supervisor_started", readonly=True)
 
-    yield
-
-    sync_loop_task.cancel()
-    if registry.supervisor is not None:
-        await registry.supervisor.stop()
-        registry.supervisor = None
-    registry.live_state = None
-    registry.flex_sync = None
-    await dispose_engine()
-    log.info("shutdown")
+    try:
+        yield
+    finally:
+        sync_loop_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sync_loop_task
+        if registry.supervisor is not None:
+            with contextlib.suppress(Exception):
+                await registry.supervisor.stop()
+            registry.supervisor = None
+        registry.live_state = None
+        registry.flex_sync = None
+        await dispose_engine()
+        log.info("shutdown")
 
 
 def create_app() -> FastAPI:
