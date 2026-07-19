@@ -24,9 +24,10 @@
 
 ## הפעלה מהירה
 
-ראו [docs/RUNBOOK.md](docs/RUNBOOK.md). בקצרה: התקנת IB Gateway עם Read-Only API, הגדרת Flex Token חד־פעמית, `./scripts/setup.sh`, `./scripts/start.sh`, ופתיחת http://localhost:3000.
+ראו [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
-`start.sh` / `setup.sh` מרימים את Docker Desktop אוטומטית ב־macOS אם ה־daemon כבוי. לאבחון: `./scripts/doctor.sh`.
+הפעלה יומית (פקודה אחת): `./scripts/start.sh`  
+הסקריפט יוצר `.env` אם צריך, מפעיל Docker Desktop ב־macOS אם כבוי, מרים את כל השירותים, ממתין ל־health, ופותח את הדשבורד. לאבחון: `./scripts/doctor.sh`.
 
 ## סטטוס
 

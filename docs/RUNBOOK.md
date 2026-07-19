@@ -51,18 +51,18 @@ IBKR_FLEX_QUERY_ID=...
 ## 5. הפעלה יומיומית
 
 ```
-$ ./scripts/start.sh        # מרים db+backend+frontend
+$ ./scripts/start.sh        # הפקודה היחידה להפעלה יומית
 ```
 
-`start.sh` בודק ש־Docker רץ. אם ה־daemon כבוי ב־macOS — הוא מנסה לפתוח את **Docker Desktop** לבד ומחכה עד שהוא מוכן (עד ~2 דקות). אם זו הפעלה ראשונה של Docker Desktop, ייתכן שתופיע חלונית אישור — אשר אותה וחכה ל־"Docker is running".
+`start.sh` מטפל לבד בכל שרשרת ההפעלה:
+1. יוצר `.env` אם חסר
+2. אם Docker כבוי ב־macOS — פותח **Docker Desktop** ומחכה עד שהוא מוכן (עד ~3 דקות)
+3. בונה ומעלה db + backend + frontend, וממתין ל־health
+4. ב־macOS פותח את http://localhost:3000 בדפדפן
 
-1. ודא ש־IB Gateway פתוח ומחובר (ירוק).
-2. פתח דפדפן: **http://localhost:3000**
-3. בפס העליון אמור להופיע: `LIVE · READ ONLY · CONNECTED` + זמן עדכון אחרון.
+ודא ש־IB Gateway פתוח ומחובר (ירוק, Read-Only API, פורט 4001). בפס העליון אמור להופיע: `LIVE · READ ONLY · CONNECTED`.
 
-אבחון מהיר: `./scripts/doctor.sh` (Docker, פורטים, Gateway, health של ה־API).
-
-עצירה: `./scripts/stop.sh` (או `docker compose down`). הנתונים נשמרים ב־volume.
+אבחון: `./scripts/doctor.sh`. עצירה: `./scripts/stop.sh`.
 
 ## 6. בדיקת תקינות (צ'קליסט אחרי התקנה)
 
