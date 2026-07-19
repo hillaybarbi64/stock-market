@@ -53,9 +53,14 @@ IBKR_FLEX_QUERY_ID=...
 ```
 $ ./scripts/start.sh        # מרים db+backend+frontend
 ```
+
+`start.sh` בודק ש־Docker רץ. אם ה־daemon כבוי ב־macOS — הוא מנסה לפתוח את **Docker Desktop** לבד ומחכה עד שהוא מוכן (עד ~2 דקות). אם זו הפעלה ראשונה של Docker Desktop, ייתכן שתופיע חלונית אישור — אשר אותה וחכה ל־"Docker is running".
+
 1. ודא ש־IB Gateway פתוח ומחובר (ירוק).
 2. פתח דפדפן: **http://localhost:3000**
 3. בפס העליון אמור להופיע: `LIVE · READ ONLY · CONNECTED` + זמן עדכון אחרון.
+
+אבחון מהיר: `./scripts/doctor.sh` (Docker, פורטים, Gateway, health של ה־API).
 
 עצירה: `./scripts/stop.sh` (או `docker compose down`). הנתונים נשמרים ב־volume.
 
@@ -81,6 +86,8 @@ $ ./scripts/restore.sh <backup-file>  # שחזור (עם אישור)
 
 | תסמין | סיבה סבירה | פעולה |
 |---|---|---|
+| `Docker daemon is not running` / `Cannot connect to the Docker daemon` | Docker Desktop סגור | הרץ שוב `./scripts/start.sh` (מנסה לפתוח Desktop אוטומטית). אם נכשל — פתח Docker Desktop ידנית, חכה ל־"Docker is running", ואז `./scripts/start.sh` |
+| `ERR_CONNECTION_REFUSED` על `:3000` | ה־stack לא רץ (בדרך כלל Docker כבוי) | `./scripts/doctor.sh` ואז `./scripts/start.sh` |
 | סטטוס `GATEWAY_DOWN` | IB Gateway סגור / לא מחובר | פתח את ה־Gateway והתחבר; המערכת תתחבר מחדש לבד תוך ~30 שניות |
 | סטטוס `AUTH_REQUIRED` | פג האימות השבועי | התחבר מחדש ב־Gateway (2FA) |
 | מחירים מסומנים DELAYED | אין מנוי Market Data בזמן אמת | תקין; אפשר לרכוש מנוי אצל IBKR אם רוצים Real-Time |

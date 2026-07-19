@@ -3,9 +3,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# shellcheck source=lib/ensure-docker.sh
+source "$(dirname "$0")/lib/ensure-docker.sh"
+
 echo "==> Checking prerequisites"
-command -v docker >/dev/null || { echo "ERROR: Docker Desktop is required — https://docker.com"; exit 1; }
-docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon is not running. Start Docker Desktop first."; exit 1; }
+ensure_docker
 
 if [ ! -f .env ]; then
   echo "==> Creating .env from .env.example (with a random DB password)"
@@ -30,3 +32,4 @@ echo "Setup complete. Next steps:"
 echo "  1. Make sure IB Gateway is running and logged in (Read-Only API enabled, port 4001)."
 echo "  2. ./scripts/start.sh"
 echo "  3. Open http://localhost:3000"
+echo "  4. If something looks wrong: ./scripts/doctor.sh"

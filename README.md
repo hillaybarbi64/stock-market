@@ -26,6 +26,8 @@
 
 ראו [docs/RUNBOOK.md](docs/RUNBOOK.md). בקצרה: התקנת IB Gateway עם Read-Only API, הגדרת Flex Token חד־פעמית, `./scripts/setup.sh`, `./scripts/start.sh`, ופתיחת http://localhost:3000.
 
+`start.sh` / `setup.sh` מרימים את Docker Desktop אוטומטית ב־macOS אם ה־daemon כבוי. לאבחון: `./scripts/doctor.sh`.
+
 ## סטטוס
 
 בפיתוח פעיל לפי [תוכנית העבודה](docs/IMPLEMENTATION_PLAN.md). מגבלות ידועות מתועדות שם ובסוף כל שלב.
