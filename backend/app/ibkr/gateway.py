@@ -255,6 +255,22 @@ class GatewaySupervisor:
             self._on_order_status(trade)
         for fill in self._ib.fills():
             self._on_exec_details(None, fill)
+        # Session buffer (fills()) is short; ask the gateway for every execution
+        # it still holds (typically recent days). Full history still needs Flex.
+        await self._request_executions()
+
+    async def _request_executions(self) -> None:
+        assert self._ib is not None
+        try:
+            from ib_async import ExecutionFilter
+
+            fills = await self._ib.reqExecutionsAsync(ExecutionFilter())
+        except Exception as exc:  # noqa: BLE001 — never fail connect because of blotter pull
+            log.warning("gateway_executions_failed", error=str(exc))
+            return
+        for fill in fills or []:
+            self._on_exec_details(None, fill)
+        log.info("gateway_executions_loaded", count=len(fills or []))
 
     def _on_error(self, reqId: int, errorCode: int, errorString: str, contract=None) -> None:
         # 2104/2106/2158 are "connection OK" notices; 10167/10197 delayed-data notices

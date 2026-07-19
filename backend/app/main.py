@@ -30,20 +30,27 @@ async def lifespan(app: FastAPI):
 
     registry.live_state = LiveStateService(hub, settings.snapshot_interval_min)
     registry.flex_sync = FlexSyncService(settings)
+    from app.services.flex_credentials import load_flex_credentials
     from app.services.templates import ensure_builtin_templates
 
     await ensure_builtin_templates()
-    sync_loop_task = None
+    # UI-saved Flex credentials override empty/stale env values.
+    db_token, db_query_id = await load_flex_credentials()
+    if db_token and db_query_id:
+        registry.flex_sync.set_credentials(db_token, db_query_id)
+        log.info("flex_credentials_loaded_from_db", query_id=db_query_id)
+
+    # Flex history sync is independent of the live Gateway connection.
+    sync_loop_task = asyncio.create_task(daily_sync_loop(registry.flex_sync))
+
     if settings.ibkr_gateway_autostart:
         registry.supervisor = GatewaySupervisor(settings, registry.live_state)
         await registry.supervisor.start()
         log.info("gateway_supervisor_started", readonly=True)
-        sync_loop_task = asyncio.create_task(daily_sync_loop(registry.flex_sync))
 
     yield
 
-    if sync_loop_task is not None:
-        sync_loop_task.cancel()
+    sync_loop_task.cancel()
     if registry.supervisor is not None:
         await registry.supervisor.stop()
         registry.supervisor = None
