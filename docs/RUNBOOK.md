@@ -88,6 +88,7 @@ $ ./scripts/restore.sh <backup-file>  # שחזור (עם אישור)
 |---|---|---|
 | `Docker daemon is not running` / `Cannot connect to the Docker daemon` | Docker Desktop סגור | הרץ שוב `./scripts/start.sh` (מנסה לפתוח Desktop אוטומטית). אם נכשל — פתח Docker Desktop ידנית, חכה ל־"Docker is running", ואז `./scripts/start.sh` |
 | `ERR_CONNECTION_REFUSED` על `:3000` | ה־stack לא רץ (בדרך כלל Docker כבוי) | `./scripts/doctor.sh` ואז `./scripts/start.sh` |
+| `ports are not available` / `address already in use` על `:8000` או `:3000` | תהליך ישן (uvicorn/next/docker) תופס את הפורט | `./scripts/start.sh` משחרר את 3000/8000/5432 אוטומטית; אם עדיין נכשל — `./scripts/stop.sh` ואז start שוב |
 | סטטוס `GATEWAY_DOWN` | IB Gateway סגור / לא מחובר | פתח את ה־Gateway והתחבר; המערכת תתחבר מחדש לבד תוך ~30 שניות |
 | סטטוס `AUTH_REQUIRED` | פג האימות השבועי | התחבר מחדש ב־Gateway (2FA) |
 | מחירים מסומנים DELAYED | אין מנוי Market Data בזמן אמת | תקין; אפשר לרכוש מנוי אצל IBKR אם רוצים Real-Time |

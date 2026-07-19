@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full bring-up: .env → Docker Desktop → build/start stack → wait healthy → open UI.
+# Full bring-up: .env → Docker Desktop → free ports → build/start → wait → open UI.
 # Idempotent. Safe to re-run. This is the single command that should get you to :3000.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -11,16 +11,31 @@ echo "==> IBKR dashboard bring-up"
 
 ensure_env_file
 ensure_docker
+free_app_ports
 
-# Prefer compose --wait when available; fall back to up -d + HTTP polls.
-echo "==> Building / starting db + backend + frontend"
-if docker compose up -d --build --wait 2>/tmp/ibkr-compose-wait.err; then
-  :
-else
-  # Older compose without --wait, or wait timed out — still try a plain up.
-  cat /tmp/ibkr-compose-wait.err >&2 || true
-  echo "    retrying without --wait…"
+compose_up() {
+  # Prefer --wait when available; fall back to plain up.
+  if docker compose up -d --build --wait; then
+    return 0
+  fi
+  echo "    compose --wait failed — retrying plain up…"
   docker compose up -d --build
+}
+
+echo "==> Building / starting db + backend + frontend"
+set +e
+compose_err="$(compose_up 2>&1)"
+compose_rc=$?
+set -e
+if [[ $compose_rc -ne 0 ]]; then
+  printf '%s\n' "$compose_err" >&2
+  if printf '%s' "$compose_err" | grep -qiE 'address already in use|ports are not available'; then
+    echo "==> Port conflict detected — cleaning again and retrying once"
+    free_app_ports
+    compose_up
+  else
+    exit "$compose_rc"
+  fi
 fi
 
 echo "==> Waiting for HTTP endpoints"
@@ -36,7 +51,6 @@ else
   echo "    backend still not answering — run: docker compose logs --tail=80 backend"
 fi
 
-# Live data requires IB Gateway on this same machine.
 if command -v nc >/dev/null 2>&1; then
   if nc -z 127.0.0.1 4001 >/dev/null 2>&1; then
     echo "    IB Gateway: port 4001 is open"
