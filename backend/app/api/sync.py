@@ -71,6 +71,22 @@ async def put_flex_config(body: FlexConfigBody) -> dict:
     }
 
 
+@router.get("/outbound-ip")
+async def outbound_ip() -> dict:
+    """Public IP IBKR Flex sees when this backend calls their API (for error 1013)."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get("https://api.ipify.org")
+            resp.raise_for_status()
+            ip = resp.text.strip()
+        return {"ip": ip, "ok": True}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("outbound_ip_lookup_failed", error=str(exc))
+        return {"ip": None, "ok": False, "detail": str(exc)}
+
+
 @router.get("/status")
 async def sync_status(db: DbSession) -> dict:
     svc = registry.flex_sync
@@ -84,9 +100,32 @@ async def sync_status(db: DbSession) -> dict:
     equity_range = (
         await db.execute(select(func.min(DailyEquity.equity_date), func.max(DailyEquity.equity_date)))
     ).one()
+
+    last_failure = None
+    for r in runs:
+        if r.status == "failed" and r.errors:
+            from app.ibkr.flex_help import explain_flex_error, help_for_code
+
+            code = r.errors.get("code")
+            err = r.errors.get("error")
+            help_he = r.errors.get("help_he") or help_for_code(str(code) if code else None)
+            if (not help_he or not code) and isinstance(err, str):
+                # Re-derive guidance for older SyncRun rows that only stored the raw error.
+                derived = explain_flex_error(RuntimeError(err))
+                help_he = help_he or derived.get("help_he")
+                code = code or derived.get("code")
+            last_failure = {
+                "code": code,
+                "error": err,
+                "help_he": help_he,
+                "started_at": r.started_at.isoformat(),
+            }
+            break
+
     return {
         "configured": bool(svc and svc.is_configured),
         "running": bool(svc and svc._running),
+        "last_failure": last_failure,
         "totals": {
             "executions": exec_count,
             "cash_transactions": cash_count,

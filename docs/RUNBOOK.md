@@ -93,7 +93,8 @@ $ ./scripts/restore.sh <backup-file>  # שחזור (עם אישור)
 | סטטוס `AUTH_REQUIRED` | פג האימות השבועי | התחבר מחדש ב־Gateway (2FA) |
 | מחירים מסומנים DELAYED | אין מנוי Market Data בזמן אמת | תקין; אפשר לרכוש מנוי אצל IBKR אם רוצים Real-Time |
 | Sync נכשל עם "generation in progress" | Flex עדיין מכין את הדוח | המערכת מנסה שוב לבד; אם חוזר — הקטן את טווח ה־Query |
-| Sync נכשל עם קוד 1012/1015 | טוקן פג/שגוי | הפק טוקן חדש בפורטל ועדכן `.env` |
+| Sync נכשל עם קוד 1012/1015 | טוקן פג/שגוי | הפק טוקן חדש בפורטל ועדכן במסך סנכרון |
+| Sync נכשל עם **`1013: IP restriction`** | ה־IP הציבורי של ה־Mac לא מורשה לטוקן Flex | Client Portal → Settings → Account Settings → **Flex Web Service** → הוסף את ה־IP שמוצג במסך סנכרון (או צור Token חדש עם ה־IP הנוכחי). אל תלחץ סנכרון שוב ושוב (עלול לגרום ל־1025). אחרי העדכון בפורטל — המתן דקה והרץ סנכרון פעם אחת |
 | הדשבורד מציג STALE | ניתוק זמני | בדוק Gateway; הנתונים האחרונים נשמרים, כלום לא אבד |
 | פורט תפוס בהרצה | תהליך ישן | `./scripts/stop.sh` ואז start מחדש |
 | "no space left" ב־Docker | דיסק דוקר מלא | `docker system prune` (לא נוגע ב־volume הנתונים) |
