@@ -136,30 +136,38 @@ kill_port_listeners() {
   fi
 }
 
-# Release ports this stack needs (3000/8000/5432) before compose up.
-# 1) stop our compose project  2) kill leftover host listeners on app ports.
+# Release ports this stack needs before compose up.
+# Stops OUR compose project only, then clears leftover listeners on :3000/:8000.
+# Port 5432 is only cleared if still busy after compose down (avoids killing
+# unrelated local Postgres when not necessary).
 free_app_ports() {
-  echo "==> Freeing ports for this stack (3000, 8000, 5432)"
-  # Stop any previous ibkr-dashboard containers so they release published ports.
+  echo "==> Freeing ports for this stack"
   docker compose down --remove-orphans >/dev/null 2>&1 || true
 
   local port
-  for port in 3000 8000 5432; do
+  for port in 3000 8000; do
     if port_in_use "$port"; then
       kill_port_listeners "$port"
+    else
+      echo "    :$port free"
     fi
   done
 
-  local busy=0
+  if port_in_use 5432; then
+    # Only free 5432 when something is still bound after our compose down —
+    # usually a stale docker-proxy from a previous failed run.
+    echo "    :5432 still busy after compose down — clearing"
+    kill_port_listeners 5432
+  else
+    echo "    :5432 free"
+  fi
+
   for port in 3000 8000 5432; do
     if port_in_use "$port"; then
       echo "    WARNING: :$port still busy after cleanup" >&2
       if command -v lsof >/dev/null 2>&1; then
         lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sed 's/^/      /' >&2 || true
       fi
-      busy=1
-    else
-      echo "    :$port free"
     fi
   done
   return 0

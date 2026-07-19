@@ -3,6 +3,7 @@ name: ibkr-dashboard
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ibkr}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
@@ -19,6 +20,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     env_file: .env
     environment:
       # Inside docker, reach the host-run IB Gateway via the Docker host alias.
@@ -40,30 +42,30 @@ services:
           "CMD-SHELL",
           "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/system/health', timeout=3)\"",
         ]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 18
-      start_period: 20s
+      retries: 12
+      start_period: 40s
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     healthcheck:
       test:
         [
           "CMD-SHELL",
           "node -e \"require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\"",
         ]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 18
-      start_period: 15s
+      retries: 12
+      start_period: 30s
 
 volumes:
   pgdata:
