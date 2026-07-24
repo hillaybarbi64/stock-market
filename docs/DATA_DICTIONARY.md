@@ -70,7 +70,11 @@ symbol+date (PK), close, adj_close, currency, source. מקור: MKT.
 ## טבלאות יומן וניתוח
 
 ### trade_cycles — מחזורי עסקה
-id, conid, direction (LONG/SHORT), open_time, close_time (nullable=פתוח), max_quantity, realized_pnl, fees_total, dividends_total, matching_method (FIFO/MANUAL), is_manually_adjusted, original_matching (JSON — השיוך האוטומטי נשמר תמיד). מקור: CALC + MANUAL.
+id, conid, open_exec_id (מזהה ה־execution שפתח את המחזור; יחד עם conid הוא
+המפתח היציב), direction (LONG/SHORT), open_time, close_time (nullable=פתוח),
+max_quantity, realized_pnl, fees_total, dividends_total, matching_method
+(FIFO/MANUAL), is_manually_adjusted, original_matching (JSON — השיוך
+האוטומטי נשמר תמיד). מקור: CALC + MANUAL.
 
 ### cycle_executions — שיוך ביצועים למחזורים
 cycle_id + exec_id + allocated_quantity. שיוך חלקי נתמך.

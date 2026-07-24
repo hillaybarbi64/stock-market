@@ -1,0 +1,114 @@
+name: ibkr-dashboard
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ibkr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/install-release.sh first}
+      POSTGRES_DB: ${POSTGRES_DB:-ibkr_dashboard}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-ibkr} -d ${POSTGRES_DB:-ibkr_dashboard}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    image: ghcr.io/${GHCR_OWNER:-hillaybarbi64}/ibkr-dashboard-backend:${DASHBOARD_IMAGE_TAG:-0.1.0}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ibkr}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ibkr_dashboard}
+      API_HOST: 0.0.0.0
+      ENVIRONMENT: local
+      IBKR_GATEWAY_HOST: ${IBKR_GATEWAY_HOST:-host.docker.internal}
+      IBKR_GATEWAY_PORT: ${IBKR_GATEWAY_PORT:-4001}
+      IBKR_CLIENT_ID: ${IBKR_CLIENT_ID:-17}
+      IBKR_READONLY: "true"
+      IBKR_GATEWAY_AUTOSTART: ${IBKR_GATEWAY_AUTOSTART:-true}
+      IBKR_FLEX_AUTOSYNC: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - appdata:/app/data
+    depends_on:
+      appdata-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/system/health', timeout=3)\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  appdata-init:
+    image: ghcr.io/${GHCR_OWNER:-hillaybarbi64}/ibkr-dashboard-backend:${DASHBOARD_IMAGE_TAG:-0.1.0}
+    user: "0:0"
+    command: ["sh", "-c", "chown -R app:app /app/data"]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - appdata:/app/data
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:-hillaybarbi64}/ibkr-dashboard-frontend:${DASHBOARD_IMAGE_TAG:-0.1.0}
+    restart: unless-stopped
+    init: true
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://127.0.0.1:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 15s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pgdata:
+  appdata:

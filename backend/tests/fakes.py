@@ -32,7 +32,7 @@ class FakeIB:
         account_values: list[AccountValue] | None = None,
     ) -> None:
         self._connect_error = connect_error
-        self._accounts = accounts or ["U7654321"]
+        self._accounts = accounts if accounts is not None else ["U7654321"]
         self._account_values = account_values or []
         self.connected = False
 

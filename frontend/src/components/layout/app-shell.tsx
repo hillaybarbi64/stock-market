@@ -42,6 +42,7 @@ const NAV: NavGroup[] = [
   {
     label: "מערכת",
     items: [
+      { href: "/connect", label: "חיבור חשבון", icon: "link" },
       { href: "/sync", label: "סנכרון", icon: "refresh" },
       { href: "/settings", label: "הגדרות", icon: "sliders" },
       { href: "/system", label: "מצב מערכת", icon: "pulse" },
@@ -133,8 +134,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="size-1.5 rounded-full bg-gain live-dot"
             style={{ boxShadow: "0 0 8px var(--glow)" }}
           />
-          <span>IBKR Web API</span>
-          <span className="ms-auto">קריאה בלבד</span>
+          <span>IBKR Gateway</span>
+          <span className="ms-auto">האפליקציה לקריאה בלבד</span>
         </div>
       </aside>
 
@@ -144,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="min-w-0">
             <div className="text-[15px] font-semibold leading-tight">{title}</div>
             <div className="text-[11px] text-faint">
-              חשבון מרג'ין · <span className="sym">{maskAccount(conn?.account)}</span>
+              חשבון מרג׳ין · <span className="sym">{maskAccount(conn?.account)}</span>
             </div>
           </div>
           <div className="ms-auto flex items-center gap-2.5">
@@ -161,6 +162,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </header>
+        {conn && conn.state !== "connected" && pathname !== "/connect" && (
+          <Link
+            href="/connect"
+            className="flex items-center justify-center gap-2 border-b border-warn/25 bg-warn/5 px-4 py-2 text-[11.5px] text-warn hover:bg-warn/10"
+          >
+            החשבון החי עדיין לא מחובר · מעבר לאשף החיבור
+            <span aria-hidden>←</span>
+          </Link>
+        )}
         <main className="min-w-0 flex-1 p-4">{children}</main>
       </div>
     </div>

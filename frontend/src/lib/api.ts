@@ -59,8 +59,18 @@ export interface ConnectionInfo {
   reconnect_attempts: number;
   next_retry_in_s: number | null;
   market_data_type: "realtime" | "delayed" | null;
+  gateway_port?: number;
+  account_mode?: "live" | "paper";
+  account_binding_confirmation_required?: boolean;
+  account_binding_confirmation_id?: string | null;
 }
 
 export const fetchHealth = () => apiGet<HealthResponse>("/system/health");
 export const fetchConnection = () => apiGet<ConnectionInfo>("/system/connection");
 export const postReconnect = () => apiPost<{ ok: boolean }>("/system/reconnect");
+export const confirmAccountBinding = (confirmationId: string) =>
+  request<{ ok: boolean; detail: string }>("/system/confirm-account-binding", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmation_id: confirmationId }),
+  });

@@ -49,9 +49,7 @@ def test_partial_exit_keeps_cycle_open():
 
 
 def test_scale_in_fifo_matching():
-    cycles = build_cycles(
-        [ex("BUY", "10", "100"), ex("BUY", "10", "120"), ex("SELL", "15", "130")]
-    )
+    cycles = build_cycles([ex("BUY", "10", "100"), ex("BUY", "10", "120"), ex("SELL", "15", "130")])
     c = cycles[0]
     # FIFO: 10 @100 + 5 @120 → (30*10)+(10*5) = 350
     assert c.realized_pnl == D("350")
@@ -91,3 +89,33 @@ def test_multiple_sequential_cycles():
     assert len(cycles) == 2
     assert cycles[0].realized_pnl == D("50")
     assert cycles[1].realized_pnl == D("-5")
+
+
+def test_same_second_cycles_have_distinct_stable_opening_execution_ids():
+    shared_time = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
+    executions = [
+        Execution(
+            exec_id=exec_id,
+            conid=1,
+            side=side,
+            quantity=D("1"),
+            price=D(price),
+            trade_time=shared_time,
+            commission=D("-1"),
+            currency="USD",
+            source="flex",
+            updated_at=shared_time,
+        )
+        for exec_id, side, price in (
+            ("e-same-1", "BUY", "100"),
+            ("e-same-2", "SELL", "101"),
+            ("e-same-3", "BUY", "102"),
+            ("e-same-4", "SELL", "103"),
+        )
+    ]
+
+    cycles = build_cycles(executions)
+
+    assert len(cycles) == 2
+    assert [cycle.open_time for cycle in cycles] == [shared_time, shared_time]
+    assert [cycle.open_exec_id for cycle in cycles] == ["e-same-1", "e-same-3"]

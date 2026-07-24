@@ -26,6 +26,8 @@ services:
       # Inside docker, reach the host-run IB Gateway via the Docker host alias.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ibkr}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ibkr_dashboard}
       IBKR_GATEWAY_HOST: ${IBKR_GATEWAY_HOST:-host.docker.internal}
+      IBKR_GATEWAY_AUTOSTART: ${IBKR_GATEWAY_AUTOSTART:-true}
+      IBKR_FLEX_AUTOSYNC: ${IBKR_FLEX_AUTOSYNC:-false}
       API_HOST: 0.0.0.0
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -34,6 +36,8 @@ services:
     volumes:
       - appdata:/app/data
     depends_on:
+      appdata-init:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     healthcheck:
@@ -46,6 +50,25 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
+
+  appdata-init:
+    build: ./backend
+    user: "0:0"
+    command: ["sh", "-c", "chown -R app:app /app/data"]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - appdata:/app/data
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
 
   frontend:
     build: ./frontend

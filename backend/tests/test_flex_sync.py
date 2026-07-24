@@ -1,10 +1,12 @@
 """Sync ingestion: idempotency, flow aggregation into daily equity,
 gateway→flex enrichment precedence. Runs against real PostgreSQL."""
 
+import asyncio
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from sqlalchemy import delete, func, select
 
 from app.core.config import Settings
@@ -16,9 +18,12 @@ from app.db.models import (
     Execution,
     FxRate,
     Instrument,
+    Setting,
+    SyncRun,
 )
 from app.ibkr.flex_parser import parse_flex_report
-from app.services.flex_sync import FlexSyncService
+from app.services.account_binding import ACCOUNT_BINDING_KEY, ensure_account_binding
+from app.services.flex_sync import FlexSyncService, SyncAlreadyRunning
 
 FIXTURE = (Path(__file__).parent / "fixtures" / "activity_flex_sample.xml").read_text()
 FIXTURE_CONIDS = (431495220, 266143774)
@@ -115,3 +120,56 @@ async def test_flex_enriches_gateway_execution():
     finally:
         await _cleanup()
         await dispose_engine()
+
+
+async def test_postgres_advisory_lock_allows_only_one_flex_service(monkeypatch):
+    monkeypatch.setenv("APP_SECRET_KEY", "flex-lock-integration-key-123456")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    async with db_session() as session:
+        await session.execute(delete(SyncRun))
+        await session.execute(delete(Setting).where(Setting.key == ACCOUNT_BINDING_KEY))
+        await session.commit()
+    await ensure_account_binding("U1234567")
+
+    first = FlexSyncService(
+        Settings(
+            app_secret_key="flex-lock-integration-key-123456",
+            ibkr_flex_token="test-token",
+            ibkr_flex_query_id="42",
+            _env_file=None,
+        )
+    )
+    second = FlexSyncService(
+        Settings(
+            app_secret_key="flex-lock-integration-key-123456",
+            ibkr_flex_token="test-token",
+            ibkr_flex_query_id="42",
+            _env_file=None,
+        )
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def hold_lock(_trigger: str, *, token: str, query_id: str) -> int:
+        assert token == "test-token"
+        assert query_id == "42"
+        entered.set()
+        await release.wait()
+        return 1
+
+    monkeypatch.setattr(first, "_run_inner", hold_lock)
+    first_task = asyncio.create_task(first.run())
+    await entered.wait()
+    try:
+        with pytest.raises(SyncAlreadyRunning):
+            await second.run()
+    finally:
+        release.set()
+        await first_task
+        async with db_session() as session:
+            await session.execute(delete(Setting).where(Setting.key == ACCOUNT_BINDING_KEY))
+            await session.commit()
+        await dispose_engine()
+        get_settings.cache_clear()

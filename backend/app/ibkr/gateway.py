@@ -5,13 +5,15 @@ Design:
   with exponential backoff (5s doubling to a 5-minute cap, never a tight loop).
 - All raw ib_async objects are normalized to app.ibkr.types dataclasses and
   handed to a single listener (the live-state service).
-- Read-only is enforced in three layers (see IBKR_INTEGRATION.md); this module
-  implements layer 2 (readonly connect) and refuses to start otherwise.
+- This build exposes no order-placement methods and refuses a configuration
+  that is not marked read-only. The user must also enable IBKR's Read-Only API
+  checkbox in Gateway; the client flag alone cannot prove that broker-side setting.
 """
 
 import asyncio
 import contextlib
-from collections.abc import Callable
+import secrets
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -33,6 +35,7 @@ from app.ibkr.types import (
     PositionData,
     PriceQuality,
 )
+from app.services.account_binding import AccountBindingConfirmationRequiredError
 
 log = get_logger(__name__)
 
@@ -56,6 +59,10 @@ _SUMMARY_TAGS = {
 
 class ReadOnlyViolation(RuntimeError):
     """Raised if anything attempts a non-readonly gateway connection."""
+
+
+class MultipleGatewayAccountsError(RuntimeError):
+    """The single-account appliance refuses an ambiguous linked-account session."""
 
 
 def mask_account(account_id: str) -> str:
@@ -86,6 +93,7 @@ class GatewaySupervisor:
         settings: Settings,
         listener: GatewayListener,
         ib_factory: Callable[[], IB] = IB,
+        account_guard: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         if not settings.ibkr_readonly:
             raise ReadOnlyViolation(
@@ -95,6 +103,7 @@ class GatewaySupervisor:
         self._settings = settings
         self._listener = listener
         self._ib_factory = ib_factory
+        self._account_guard = account_guard
         self._ib: IB | None = None
         self._task: asyncio.Task | None = None
         self._stopped = asyncio.Event()
@@ -102,6 +111,10 @@ class GatewaySupervisor:
         self._flush_task: asyncio.Task | None = None
         self.info = ConnectionInfo(readonly=True)
         self._account_currency = settings.base_currency_fallback
+        self._account_id = ""
+        self._pending_account_id = ""
+        self._binding_confirmation_id = ""
+        self.binding_confirmation_required = False
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -122,6 +135,40 @@ class GatewaySupervisor:
         """User-triggered: skip the current backoff wait."""
         self.info.reconnect_attempts = 0
         self._retry_now.set()
+
+    @property
+    def account_id(self) -> str:
+        """Raw account id for in-process binding checks; never return or log it."""
+        return self._account_id
+
+    @property
+    def pending_account_id(self) -> str:
+        """Raw pending id for local confirmation only; never return or log it."""
+        return self._pending_account_id
+
+    @property
+    def binding_confirmation_id(self) -> str:
+        """Opaque browser confirmation id; it contains no account identifier."""
+        return self._binding_confirmation_id
+
+    def pending_account_for_confirmation(self, confirmation_id: str) -> str:
+        """Resolve only the exact account candidate represented in the browser."""
+        if (
+            not self.binding_confirmation_required
+            or not confirmation_id
+            or not self._binding_confirmation_id
+            or not secrets.compare_digest(confirmation_id, self._binding_confirmation_id)
+        ):
+            return ""
+        return self._pending_account_id
+
+    def complete_binding_confirmation(self, confirmation_id: str, account_id: str) -> None:
+        """Clear a confirmation only if it still refers to the captured account."""
+        if (
+            self.pending_account_for_confirmation(confirmation_id) == account_id
+            and self._pending_account_id == account_id
+        ):
+            self._clear_pending_binding_confirmation()
 
     async def fetch_daily_bars(self, conid: int, duration: str = "6 M") -> list[dict]:
         """Read-only historical daily bars for one instrument. Returns a plain
@@ -182,7 +229,9 @@ class GatewaySupervisor:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 — supervisor must survive anything
-                await self._set_state(GatewayState.DISCONNECTED, error=f"{type(exc).__name__}: {exc}")
+                await self._set_state(
+                    GatewayState.DISCONNECTED, error=f"{type(exc).__name__}: {exc}"
+                )
             finally:
                 await self._disconnect()
 
@@ -200,7 +249,8 @@ class GatewaySupervisor:
     async def _connect(self) -> None:
         s = self._settings
         self._ib = self._ib_factory()
-        # readonly=True is layer 2 of the read-only enforcement.
+        # This keeps ib_async startup in read-only mode. Order safety ultimately
+        # relies on the absence of order APIs here plus Gateway's Read-Only checkbox.
         await self._ib.connectAsync(
             host=s.ibkr_gateway_host,
             port=s.ibkr_gateway_port,
@@ -209,8 +259,37 @@ class GatewaySupervisor:
             timeout=15,
         )
         accounts = self._ib.managedAccounts()
-        account = accounts[0] if accounts else ""
-        self.info.account_id_masked = mask_account(account) if account else None
+        if len(accounts) != 1:
+            self._clear_pending_binding_confirmation()
+            self.info.account_id_masked = None
+            raise MultipleGatewayAccountsError(
+                "Exactly one IBKR account must be available; use a username scoped to one account"
+            )
+        account = accounts[0]
+        if self._account_guard is not None:
+            try:
+                await self._account_guard(account)
+            except AccountBindingConfirmationRequiredError:
+                if self._pending_account_id != account:
+                    self._binding_confirmation_id = ""
+                self._pending_account_id = account
+                # Legacy non-empty databases need to show the candidate account
+                # for explicit confirmation. No data is ingested in this state.
+                self.info.account_id_masked = mask_account(account)
+                self.binding_confirmation_required = True
+                if not self._binding_confirmation_id:
+                    self._binding_confirmation_id = secrets.token_urlsafe(24)
+                raise
+            except Exception:
+                self._clear_pending_binding_confirmation()
+                # Never label already-stored data with a rejected account.
+                self.info.account_id_masked = (
+                    mask_account(self._account_id) if self._account_id else None
+                )
+                raise
+        self._clear_pending_binding_confirmation()
+        self._account_id = account
+        self.info.account_id_masked = mask_account(account)
         self.info.connected_since = datetime.now(UTC)
         self.info.next_retry_in_s = None
         self._wire_events(self._ib)
@@ -233,6 +312,11 @@ class GatewaySupervisor:
             with contextlib.suppress(Exception):
                 self._ib.disconnect()
             self._ib = None
+
+    def _clear_pending_binding_confirmation(self) -> None:
+        self._pending_account_id = ""
+        self._binding_confirmation_id = ""
+        self.binding_confirmation_required = False
 
     # -- event wiring and normalization -------------------------------------
 
@@ -264,7 +348,7 @@ class GatewaySupervisor:
         try:
             from ib_async import ExecutionFilter
 
-            fills = await self._ib.reqExecutionsAsync(ExecutionFilter())
+            fills = await self._ib.reqExecutionsAsync(ExecutionFilter(acctCode=self._account_id))
         except Exception as exc:  # noqa: BLE001 — never fail connect because of blotter pull
             log.warning("gateway_executions_failed", error=str(exc))
             return
@@ -284,11 +368,15 @@ class GatewaySupervisor:
         self.info.last_error = f"[{errorCode}] {errorString}"
 
     def _on_account_value(self, av: AccountValue) -> None:
+        if self._account_id and av.account != self._account_id:
+            return
         if av.tag == "NetLiquidation" and av.currency and av.currency != "BASE":
             self._account_currency = av.currency
         self._schedule_flush()
 
-    def _on_pnl(self, _pnl) -> None:
+    def _on_pnl(self, pnl) -> None:
+        if self._account_id and getattr(pnl, "account", "") != self._account_id:
+            return
         self._schedule_flush()
 
     def _schedule_flush(self) -> None:
@@ -306,11 +394,17 @@ class GatewaySupervisor:
             return
         values: dict[str, Decimal] = {}
         for av in self._ib.accountValues():
+            if self._account_id and av.account != self._account_id:
+                continue
             if av.tag in _SUMMARY_TAGS and av.currency in ("", self._account_currency, "BASE"):
                 with contextlib.suppress(ArithmeticError, ValueError):
                     values[_SUMMARY_TAGS[av.tag]] = Decimal(av.value)
         daily_pnl = None
-        pnl_list = self._ib.pnl()
+        pnl_list = [
+            pnl
+            for pnl in self._ib.pnl()
+            if not self._account_id or getattr(pnl, "account", "") == self._account_id
+        ]
         if pnl_list and pnl_list[0].dailyPnL == pnl_list[0].dailyPnL:  # not NaN
             daily_pnl = Decimal(str(pnl_list[0].dailyPnL))
         data = AccountSummaryData(
@@ -327,6 +421,8 @@ class GatewaySupervisor:
             return
         by_ccy: dict[str, dict[str, Decimal]] = {}
         for av in self._ib.accountValues():
+            if self._account_id and av.account != self._account_id:
+                continue
             if av.tag in ("CashBalance", "SettledCash", "NetLiquidationByCurrency", "ExchangeRate"):
                 if not av.currency or av.currency == "BASE":
                     continue
@@ -348,19 +444,31 @@ class GatewaySupervisor:
             await self._listener.on_cash_balances(balances)
 
     def _on_portfolio_item(self, item: PortfolioItem) -> None:
+        if self._account_id and item.account != self._account_id:
+            return
         c = item.contract
         pos = PositionData(
             ts=datetime.now(UTC),
             instrument=_instrument(c),
             quantity=Decimal(str(item.position)),
-            avg_cost=Decimal(str(item.averageCost)) if item.averageCost == item.averageCost else None,
-            market_price=Decimal(str(item.marketPrice)) if item.marketPrice == item.marketPrice else None,
-            market_value=Decimal(str(item.marketValue)) if item.marketValue == item.marketValue else None,
+            avg_cost=Decimal(str(item.averageCost))
+            if item.averageCost == item.averageCost
+            else None,
+            market_price=Decimal(str(item.marketPrice))
+            if item.marketPrice == item.marketPrice
+            else None,
+            market_value=Decimal(str(item.marketValue))
+            if item.marketValue == item.marketValue
+            else None,
             unrealized_pnl=(
-                Decimal(str(item.unrealizedPNL)) if item.unrealizedPNL == item.unrealizedPNL else None
+                Decimal(str(item.unrealizedPNL))
+                if item.unrealizedPNL == item.unrealizedPNL
+                else None
             ),
             price_quality=(
-                PriceQuality.DELAYED if self.info.market_data_type == "delayed" else PriceQuality.UNKNOWN
+                PriceQuality.DELAYED
+                if self.info.market_data_type == "delayed"
+                else PriceQuality.UNKNOWN
             ),
         )
         self.info.last_update = pos.ts
@@ -368,10 +476,15 @@ class GatewaySupervisor:
 
     def _on_exec_details(self, _trade, fill: Fill) -> None:
         ex = fill.execution
+        if self._account_id and ex.acctNumber != self._account_id:
+            return
         commission = None
         commission_ccy = None
         realized = None
-        if fill.commissionReport and fill.commissionReport.commission == fill.commissionReport.commission:
+        if (
+            fill.commissionReport
+            and fill.commissionReport.commission == fill.commissionReport.commission
+        ):
             commission = Decimal(str(fill.commissionReport.commission))
             commission_ccy = fill.commissionReport.currency or None
             if fill.commissionReport.realizedPNL == fill.commissionReport.realizedPNL:
@@ -394,6 +507,8 @@ class GatewaySupervisor:
 
     def _on_order_status(self, trade: Trade) -> None:
         o, st = trade.order, trade.orderStatus
+        if self._account_id and o.account != self._account_id:
+            return
         data = OrderData(
             perm_id=str(o.permId or o.orderId),
             status=st.status,

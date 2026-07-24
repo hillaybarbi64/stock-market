@@ -13,6 +13,11 @@ from sqlalchemy import desc, select
 from app.core.logging import get_logger
 from app.db.base import db_session
 from app.db.models import SyncRun
+from app.services.flex_cooldown import (
+    FlexAttemptBlocked,
+    FlexCooldownActive,
+    get_active_flex_cooldown,
+)
 from app.services.flex_sync import FlexSyncService, SyncAlreadyRunning
 
 log = get_logger(__name__)
@@ -38,6 +43,19 @@ async def daily_sync_loop(service: FlexSyncService) -> None:
             consecutive_failures = 0
         except SyncAlreadyRunning:
             pass
+        except FlexCooldownActive as exc:
+            wait = min(CHECK_INTERVAL_S, exc.cooldown.remaining_seconds)
+            log.info(
+                "auto_sync_skipped_flex_cooldown",
+                remaining_s=exc.cooldown.remaining_seconds,
+            )
+        except FlexAttemptBlocked as exc:
+            wait = min(CHECK_INTERVAL_S, max(1, exc.block.remaining_seconds))
+            log.info(
+                "auto_sync_skipped_attempt_guard",
+                reason=exc.block.reason,
+                remaining_s=exc.block.remaining_seconds,
+            )
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — loop survives; failure is on the SyncRun row
@@ -53,6 +71,14 @@ async def daily_sync_loop(service: FlexSyncService) -> None:
 
 async def _due(service: FlexSyncService) -> bool:
     async with db_session() as session:
+        cooldown = await get_active_flex_cooldown(session)
+        if cooldown:
+            log.info(
+                "auto_sync_skipped_flex_cooldown",
+                error_code=cooldown.error_code,
+                remaining_s=cooldown.remaining_seconds,
+            )
+            return False
         last_ok = (
             await session.execute(
                 select(SyncRun.finished_at)

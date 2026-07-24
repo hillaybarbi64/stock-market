@@ -2,13 +2,21 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir uv
+ARG UV_VERSION=0.11.31
+RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-dev --no-install-project || uv sync --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
-RUN uv sync --no-dev
+RUN uv sync --frozen --no-dev
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --create-home app \
+    && mkdir -p /app/data \
+    && chown -R app:app /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+USER app
 
 EXPOSE 8000
 

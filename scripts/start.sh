@@ -17,6 +17,7 @@ stack_healthy() {
 }
 
 print_status() {
+  local gateway_port gateway_mode
   echo ""
   echo "==> Status"
   if curl -fsS --connect-timeout 2 http://127.0.0.1:8000/api/system/health >/dev/null 2>&1; then
@@ -30,11 +31,19 @@ print_status() {
     echo "    --- frontend logs ---"
     docker compose logs --tail=40 frontend 2>/dev/null || true
   fi
+  gateway_port="$(
+    awk -F= '$1 == "IBKR_GATEWAY_PORT" { print substr($0, index($0, "=") + 1); exit }' .env
+  )"
+  gateway_port="${gateway_port:-4001}"
+  gateway_mode="Live"
+  if [[ "$gateway_port" == "4002" || "$gateway_port" == "7497" ]]; then
+    gateway_mode="Paper"
+  fi
   if command -v nc >/dev/null 2>&1; then
-    if nc -z 127.0.0.1 4001 >/dev/null 2>&1; then
-      echo "    IB Gateway: port 4001 is open"
+    if nc -z 127.0.0.1 "$gateway_port" >/dev/null 2>&1; then
+      echo "    IB Gateway: ${gateway_mode} port ${gateway_port} is open"
     else
-      echo "    IB Gateway: nothing on :4001 — open IB Gateway for live data"
+      echo "    IB Gateway: nothing on :${gateway_port} — open IB Gateway (${gateway_mode}, Read-Only API)"
     fi
   fi
 }

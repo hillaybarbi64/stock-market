@@ -17,6 +17,7 @@ dependencies = [
     "defusedxml>=0.7",
     "python-multipart>=0.0.9",
     "greenlet>=3.0",
+    "cryptography>=43",
 ]
 
 [dependency-groups]

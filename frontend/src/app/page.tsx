@@ -325,7 +325,7 @@ export default function OverviewPage() {
 
             {tfBars.length > 1 ? (
               <>
-                <CandlestickChart bars={tfBars} height={392} currency={ccy} />
+                <CandlestickChart bars={tfBars} height={392} />
                 <div className="flex items-center justify-between border-t border-line px-3 py-1.5">
                   <div className="flex items-center gap-1" dir="ltr">
                     {TFS.map((t) => (

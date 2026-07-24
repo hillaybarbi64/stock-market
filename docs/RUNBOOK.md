@@ -17,7 +17,8 @@
    - ✅ **Read-Only API** ← זה מה שמבטיח שאי אפשר לשלוח פקודות. חובה.
    - Socket port: **4001**.
    - ✅ Allow connections from localhost only (Trusted IPs: 127.0.0.1).
-   - ❌ בטל "Read-Only API" רק אם אי־פעם תבקש במפורש מסחר מהמערכת (לא מומלץ כעת).
+   - אין לבטל **Read-Only API** בגרסה הזו. אין בה מודול מסחר והיא מסרבת
+     לעלות עם `IBKR_READONLY=false`.
 3. Configure → Lock and Exit → קבע שעת Restart יומית נוחה (למשל 04:00). היה מודע: פעם בשבוע לערך תידרש התחברות ידנית מחדש עם 2FA — זו מדיניות של IBKR, המערכת מציגה זאת בסטטוס.
 
 **הסיסמה שלך מוקלדת רק בחלון של IB Gateway. המערכת לא רואה ולא שומרת אותה.**
@@ -32,7 +33,7 @@
    - שמור ורשום את ה־**Query ID** (מספר).
 3. **Settings (גלגל שיניים) → Account Settings → Flex Web Service → Configure**:
    - הפעל, צור **Token**. תוקף מומלץ: שנה. רשום את הטוקן (מוצג פעם אחת).
-4. את שני הערכים אפשר להזין ישירות במסך **סנכרון** בדשבורד (מומלץ) — שמירה מפעילה סנכרון אוטומטי. לחלופין הזן ב־`.env` (סעיף הבא). אל תשלח אותם בצ'אט.
+4. את שני הערכים אפשר להזין ישירות במסך **סנכרון** בדשבורד (מומלץ). ברירת המחדל בטוחה: התזמון היומי כבוי, והרצה מתבצעת רק בלחיצה מפורשת. לחלופין הזן ב־`.env` (סעיף הבא). אל תשלח אותם בצ'אט.
 
 ## 4. התקנת המערכת
 
@@ -46,6 +47,7 @@ $ ./scripts/setup.sh
 ```
 IBKR_FLEX_TOKEN=...   # מהסעיף הקודם
 IBKR_FLEX_QUERY_ID=...
+IBKR_FLEX_AUTOSYNC=false  # השאר כבוי עד שסנכרון ידני מבוקר מצליח
 ```
 
 ## 5. הפעלה יומיומית
@@ -60,7 +62,8 @@ $ ./scripts/start.sh        # הפקודה היחידה להפעלה יומית
 3. בונה ומעלה db + backend + frontend, וממתין ל־health
 4. ב־macOS פותח את http://localhost:3000 בדפדפן
 
-ודא ש־IB Gateway פתוח ומחובר (ירוק, Read-Only API, פורט 4001). בפס העליון אמור להופיע: `LIVE · READ ONLY · CONNECTED`.
+ודא ש־IB Gateway פתוח ומחובר (ירוק, Read-Only API, פורט 4001 ל־Live או
+4002 ל־Paper). בפס העליון אמור להופיע `APP READ-ONLY · CONNECTED`.
 
 אבחון: `./scripts/doctor.sh`. עצירה: `./scripts/stop.sh`.
 
@@ -71,15 +74,18 @@ $ ./scripts/start.sh        # הפקודה היחידה להפעלה יומית
 | Backend חי | `curl http://localhost:8000/api/system/health` | `"status":"ok"`, db ok |
 | חיבור Gateway | מסך System Status | IBKR: CONNECTED, Read-Only: true |
 | נתוני אמת | דשבורד | NLV תואם למה שמוצג ב־IBKR Mobile |
-| Flex | מסך Sync → Run Sync | ריצה מסתיימת בהצלחה, נספרות רשומות |
-| אין כפילויות | הרץ Sync פעמיים | ריצה שנייה: 0 רשומות חדשות |
+| Flex | רק לאחר שאין cooldown: מסך Sync → Run Sync פעם אחת | ריצה מסתיימת בהצלחה, נספרות רשומות |
+| אין כפילויות | בדיקות ה־CI; אין להריץ Flex פעם נוספת רק לצורך בדיקה | סנכרון עתידי שנדרש אינו יוצר כפילויות |
 
 ## 7. גיבוי ושחזור
 
 ```
 $ ./scripts/backup.sh                 # dump של ה-DB + קבצים → ~/.ibkr-dashboard/backups
-$ ./scripts/restore.sh <backup-file>  # שחזור (עם אישור)
+$ ./scripts/restore.sh <backup-file> [data-directory]  # החלפה מלאה עם safety backup
 ```
+
+גיבוי ושחזור משתמשים באותה נעילת מערכת־הפעלה, ולכן אינם יכולים לרוץ
+במקביל. הנעילה משתחררת אוטומטית גם אם התהליך נעצר או קורס.
 מומלץ: גיבוי שבועי (הסקריפט מתאים ל־cron/launchd; הוראה בתוך הקובץ).
 
 ## 8. פתרון תקלות
@@ -88,19 +94,20 @@ $ ./scripts/restore.sh <backup-file>  # שחזור (עם אישור)
 |---|---|---|
 | `Docker daemon is not running` / `Cannot connect to the Docker daemon` | Docker Desktop סגור | הרץ שוב `./scripts/start.sh` (מנסה לפתוח Desktop אוטומטית). אם נכשל — פתח Docker Desktop ידנית, חכה ל־"Docker is running", ואז `./scripts/start.sh` |
 | `ERR_CONNECTION_REFUSED` על `:3000` | ה־stack לא רץ (בדרך כלל Docker כבוי) | `./scripts/doctor.sh` ואז `./scripts/start.sh` |
-| `ports are not available` / `address already in use` על `:8000` או `:3000` | תהליך ישן (uvicorn/next/docker) תופס את הפורט | `./scripts/start.sh` משחרר את 3000/8000/5432 אוטומטית; אם עדיין נכשל — `./scripts/stop.sh` ואז start שוב |
+| `ports are not available` / `address already in use` על `:8000` או `:3000` | תהליך שאינו שייך לפרויקט תופס את הפורט | `start.sh` מציג את התהליך ומסרב להרוג אותו; עצור או הגדר אותו מחדש ואז הרץ שוב |
 | סטטוס `GATEWAY_DOWN` | IB Gateway סגור / לא מחובר | פתח את ה־Gateway והתחבר; המערכת תתחבר מחדש לבד תוך ~30 שניות |
 | סטטוס `AUTH_REQUIRED` | פג האימות השבועי | התחבר מחדש ב־Gateway (2FA) |
 | מחירים מסומנים DELAYED | אין מנוי Market Data בזמן אמת | תקין; אפשר לרכוש מנוי אצל IBKR אם רוצים Real-Time |
-| Sync נכשל עם "generation in progress" | Flex עדיין מכין את הדוח | המערכת מנסה שוב לבד; אם חוזר — הקטן את טווח ה־Query |
-| Sync נכשל עם קוד 1012/1015 | טוקן פג/שגוי | הפק טוקן חדש בפורטל ועדכן במסך סנכרון |
-| Sync נכשל עם **`1013: IP restriction`** | ה־IP הציבורי של ה־Mac לא מורשה לטוקן Flex | Client Portal → Settings → Account Settings → **Flex Web Service** → הוסף את ה־IP שמוצג במסך סנכרון (או צור Token חדש עם ה־IP הנוכחי). אל תלחץ סנכרון שוב ושוב (עלול לגרום ל־1025). אחרי העדכון בפורטל — המתן דקה והרץ סנכרון פעם אחת |
+| Sync מציג "generation in progress" אחרי שהבקשה התקבלה | Flex עדיין מכין את הדוח | המערכת ממשיכה לבד רק לבדוק את אותו דוח, במרווחים בטוחים; היא אינה שולחת בקשת דוח חדשה |
+| Sync נכשל עם קוד 1025 (`too many failed attempts`) | חסימת קצב זמנית ברמת חשבון IBKR, לא טוקן שגוי | אל תשלח בקשות Flex ידניות. המערכת מפעילה cooldown עמיד ל־restart למשך שעתיים, משביתה את הכפתור ומאפשרת ניסיון יחיד בסיום |
+| Sync נכשל עם קוד 1012/1015 | טוקן פג/שגוי | הפק טוקן חדש בפורטל ועדכן במסך הסנכרון (או ב־`.env`) |
+| Sync נכשל עם **`1013: IP restriction`** | ה־IP הציבורי של המחשב לא מורשה לטוקן Flex | Client Portal → Settings → Account Settings → **Flex Web Service** → הוסף את ה־IP שמוצג במסך הסנכרון (או צור Token חדש עם ה־IP הנוכחי). אל תלחץ שוב ושוב — אחרי העדכון המתן דקה והרץ סנכרון פעם אחת בלבד |
 | הדשבורד מציג STALE | ניתוק זמני | בדוק Gateway; הנתונים האחרונים נשמרים, כלום לא אבד |
 | פורט תפוס בהרצה | תהליך ישן | `./scripts/stop.sh` ואז start מחדש |
 | "no space left" ב־Docker | דיסק דוקר מלא | `docker system prune` (לא נוגע ב־volume הנתונים) |
 
 הערות תפעול נוספות:
-- **סנכרון אוטומטי**: רץ לבד אחת ל-24 שעות כשה-Flex מוגדר; הרצה ידנית במסך "סנכרון".
+- **סנכרון אוטומטי**: כבוי כברירת מחדל. רק לאחר שסנכרון ידני מבוקר הצליח, אפשר להגדיר `IBKR_FLEX_AUTOSYNC=true`; אז הוא רץ לכל היותר אחת ל־24 שעות.
 - **מחזורי עסקה**: אחרי סנכרון ראשון, לחץ "בנה מחזורי עסקה מחדש" במסך "יומן מסחר".
 - **דוחות**: מסך "דוחות" → בחר טווח → "הדפס / שמור כ-PDF"; ייצוא CSV מאותו מסך.
 - **התראות**: מוגדרות במסך "הגדרות"; מופיעות בתוך המערכת (אין שליחה החוצה בשלב זה).

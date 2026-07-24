@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Panel } from "@/components/ui/panel";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
 
@@ -28,6 +28,14 @@ interface SyncStatus {
     help_he: string | null;
     started_at: string;
   } | null;
+  autosync_enabled: boolean;
+  account_bound: boolean;
+  cooldown: {
+    active: boolean;
+    error_code: string | null;
+    until: string | null;
+    remaining_seconds: number;
+  };
   totals: {
     executions: number;
     cash_transactions: number;
@@ -41,6 +49,7 @@ interface FlexConfig {
   configured: boolean;
   query_id: string;
   token_hint: string;
+  autosync_enabled: boolean;
 }
 
 interface ReconCheck {
@@ -66,9 +75,15 @@ export default function SyncPage() {
     queryFn: () => apiGet<{ checks: ReconCheck[] }>("/sync/reconciliation"),
     refetchInterval: 60_000,
   });
+  const s = status.data;
+  const fail = s?.last_failure;
+  const isIpBlock =
+    fail?.code === "1013" ||
+    (typeof fail?.error === "string" && fail.error.includes("1013"));
   const outboundIp = useQuery({
     queryKey: ["sync", "outbound-ip"],
     queryFn: () => apiGet<{ ip: string | null; ok: boolean }>("/sync/outbound-ip"),
+    enabled: isIpBlock,
     staleTime: 60_000,
   });
   const runSync = useMutation({
@@ -77,14 +92,19 @@ export default function SyncPage() {
   });
 
   const [token, setToken] = useState("");
-  const [queryId, setQueryId] = useState("");
+  const [queryId, setQueryId] = useState<string | null>(null);
+  const effectiveQueryId = queryId ?? flexConfig.data?.query_id ?? "";
   const saveFlex = useMutation({
-    mutationFn: () =>
+    mutationFn: ({ runSyncNow }: { runSyncNow: boolean }) =>
       apiPut<{
         ok: boolean;
         detail?: string;
         sync_started?: boolean;
-      }>("/sync/flex-config", { token, query_id: queryId, run_sync_now: true }),
+      }>("/sync/flex-config", {
+        token,
+        query_id: effectiveQueryId,
+        run_sync_now: runSyncNow,
+      }),
     onSuccess: () => {
       setToken("");
       queryClient.invalidateQueries({ queryKey: ["sync"] });
@@ -92,17 +112,7 @@ export default function SyncPage() {
     },
   });
 
-  useEffect(() => {
-    if (flexConfig.data?.query_id && !queryId) {
-      setQueryId(flexConfig.data.query_id);
-    }
-  }, [flexConfig.data?.query_id, queryId]);
-
-  const s = status.data;
-  const fail = s?.last_failure;
-  const isIpBlock =
-    fail?.code === "1013" ||
-    (typeof fail?.error === "string" && fail.error.includes("1013"));
+  const flexBlocked = Boolean(s?.cooldown?.active);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -111,14 +121,26 @@ export default function SyncPage() {
         <button
           type="button"
           onClick={() => runSync.mutate()}
-          disabled={!s?.configured || s?.running || runSync.isPending}
+          disabled={
+            !s?.configured ||
+            !s?.account_bound ||
+            s?.running ||
+            flexBlocked ||
+            runSync.isPending
+          }
           className="rounded-sm bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-40"
         >
-          {s?.running ? "סנכרון רץ…" : "הרץ סנכרון עכשיו"}
+          {s?.running
+            ? "סנכרון רץ…"
+            : !s?.account_bound
+              ? "חבר Gateway תחילה"
+              : flexBlocked
+              ? `Flex בהמתנה · ${formatDuration(s?.cooldown.remaining_seconds ?? 0)}`
+              : "הרץ סנכרון עכשיו"}
         </button>
       </div>
 
-      {fail && s?.totals.executions === 0 && (
+      {fail && (
         <div
           className="rounded-sm border border-[color-mix(in_srgb,var(--warn)_40%,transparent)] bg-[color-mix(in_srgb,var(--warn)_10%,transparent)] px-4 py-3"
           role="alert"
@@ -155,12 +177,23 @@ export default function SyncPage() {
         </div>
       )}
 
+      {s?.cooldown.active && s.cooldown.until && (
+        <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2.5 text-[12px] leading-relaxed text-warn">
+          <strong className="font-semibold">IBKR Flex בהמתנה בטוחה (1025).</strong>{" "}
+          זו חסימה זמנית ברמת החשבון, לא תקלה בטוקן. המערכת לא תשלח בקשות נוספות עד{" "}
+          <span className="num" dir="ltr">
+            {new Date(s.cooldown.until).toLocaleString("he-IL")}
+          </span>
+          , ואז תאפשר ניסיון יחיד.
+        </div>
+      )}
+
       <Panel title="הגדרת Flex (היסטוריית עסקאות)" subtitle="Activity Flex Query">
         <p className="mb-3 text-[12.5px] leading-relaxed text-muted">
           Gateway החי מביא פוזיציות ו־P&amp;L עדכניים בלבד.{" "}
           <strong className="font-medium text-fg">עסקאות עבר</strong> מגיעות מ־Flex Web
           Service. צור Token + Activity Flex Query בפורטל IBKR (ראו RUNBOOK §3), הדבק כאן,
-          ושמור — הסנכרון יתחיל אוטומטית.
+          ובחר במפורש אם לשמור בלבד או להתחיל ניסיון סנכרון יחיד.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="block text-[11px] text-faint">
@@ -182,7 +215,7 @@ export default function SyncPage() {
           <label className="block text-[11px] text-faint">
             Query ID
             <input
-              value={queryId}
+              value={effectiveQueryId}
               onChange={(e) => setQueryId(e.target.value.trim())}
               placeholder="123456"
               className="num mt-1 block w-36 rounded-sm border border-line bg-bg px-2 py-1.5 text-[12px] outline-none focus:border-line-strong"
@@ -191,23 +224,38 @@ export default function SyncPage() {
           </label>
           <button
             type="button"
-            disabled={!token || !queryId || saveFlex.isPending}
-            onClick={() => saveFlex.mutate()}
+            disabled={!token || !effectiveQueryId || saveFlex.isPending}
+            onClick={() => saveFlex.mutate({ runSyncNow: !flexBlocked })}
             className="rounded-sm border border-line bg-panel px-3 py-1.5 text-[12px] font-medium transition-colors hover:bg-hover disabled:opacity-40"
           >
-            {saveFlex.isPending ? "שומר…" : "שמור והפעל סנכרון"}
+            {saveFlex.isPending
+              ? "שומר…"
+              : flexBlocked
+                ? "שמור פרטים בלבד"
+                : "שמור והפעל סנכרון"}
           </button>
         </div>
         {flexConfig.data?.configured && (
-          <p className="mt-2 text-[11.5px] text-gain">
-            Flex מוגדר · Query <span className="num" dir="ltr">{flexConfig.data.query_id}</span>
-            {flexConfig.data.token_hint ? (
-              <>
-                {" "}
-                · Token <span className="sym" dir="ltr">{flexConfig.data.token_hint}</span>
-              </>
-            ) : null}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 text-[11.5px]">
+            <p className="text-gain">
+              Flex מוגדר · Query{" "}
+              <span className="num" dir="ltr">
+                {flexConfig.data.query_id}
+              </span>
+              {flexConfig.data.token_hint ? (
+                <>
+                  {" "}
+                  · Token{" "}
+                  <span className="sym" dir="ltr">
+                    {flexConfig.data.token_hint}
+                  </span>
+                </>
+              ) : null}
+            </p>
+            <span className={s?.autosync_enabled ? "text-gain" : "text-warn"}>
+              · תזמון יומי {s?.autosync_enabled ? "פעיל" : "כבוי לבטיחות"}
+            </span>
+          </div>
         )}
         {saveFlex.data?.detail && (
           <p className="mt-2 text-[12px] text-muted">{saveFlex.data.detail}</p>
@@ -349,4 +397,12 @@ function Metric({ label, value }: { label: string; value: number | undefined }) 
       </dd>
     </div>
   );
+}
+
+function formatDuration(totalSeconds: number): string {
+  const totalMinutes = Math.ceil(Math.max(0, totalSeconds) / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")} ש׳`;
+  return `${Math.max(1, minutes)} דק׳`;
 }

@@ -64,7 +64,9 @@
 
 ### Infrastructure
 
-- `docker-compose.yml` — שלושה שירותים: `db` (PostgreSQL), `backend`, `frontend`. ה־Gateway של IBKR רץ מחוץ ל־Docker (חובה — הוא דורש UI להתחברות).
+- `docker-compose.yml` — שלושה שירותים ארוכי־חיים (`db`, `backend`,
+  `frontend`) ושירות init חד־פעמי שמתקן בעלות על volume הקבצים. ה־Gateway
+  של IBKR רץ מחוץ ל־Docker (חובה — הוא דורש UI להתחברות).
 - `.env.example` — כל המשתנים, בלי ערכים אמיתיים.
 - `scripts/setup.sh`, `scripts/start.sh`, `scripts/backup.sh`.
 - Health checks: `/api/system/health` בודק DB, חיבור Gateway, טריות נתונים.
@@ -80,7 +82,7 @@
 
 ### 3.3 Read-Only בשלוש שכבות
 1. הגדרת **Read-Only API** ב־IB Gateway עצמו (אכיפה בצד IBKR).
-2. `readonly=True` בחיבור `ib_async` (הספרייה מסרבת לשלוח פקודות).
+2. `readonly=True` בחיבור `ib_async` כמצב אפליקטיבי; הוא אינו תחליף לאכיפת Read-Only בצד ה־Gateway.
 3. ב־Backend לא קיים בכלל קוד לשליחת/שינוי/ביטול הוראות — אין endpoint כזה.
 
 ### 3.4 אידמפוטנטיות בסנכרון
@@ -102,4 +104,5 @@
 - **מודול מסחר** — נאסר במפורש בדרישות עד לבקשה עתידית. אין שום קוד שליחת הוראות.
 - **Multi-user / הרשאות משתמשים** — המערכת אישית ורצה מקומית. תוכנן כך שאפשר להוסיף בעתיד (עמודת account קיימת בסכמה).
 - **Redis/Kafka/Microservices** — עומס תפעולי ללא תועלת בהיקף הזה.
-- **שירותי ענן / Analytics חיצוני** — הנתונים לא עוזבים את המחשב שלך.
+- **Analytics חיצוני** — אינו קיים. מודול Finnhub הוא opt-in; כשהוא פעיל
+  נשלחים אליו סמלי ההחזקות וטווח תאריכים בלבד לצורך חיפוש חדשות.

@@ -41,15 +41,17 @@
 4. **הגדרת Flex בצד IBKR** (בפורטל של IBKR, חד־פעמי):
    - Performance & Reports → Flex Queries → יצירת **Activity Flex Query** עם הסקציות: Trades (Executions), Cash Transactions, Cash Report, Equity Summary (EquitySummaryInBase), Open Positions, Corporate Actions, Transfers, FX (Statement of Funds/Trades לפי הצורך). טווח: Last 365 Days.
    - Settings → API → Flex Web Service → **הפקת Token** (מומלץ תוקף שנה, מוגבל ל־IP הביתי אם קבוע).
-5. הזנת `IBKR_FLEX_TOKEN` ו־`IBKR_FLEX_QUERY_ID` בקובץ `.env` המקומי (לא נכנס ל־Git).
+5. הזנת ה־Token וה־Query ID במסך `/connect` (מומלץ; ה־Token מוצפן
+   לפני שמירה מקומית), או לחלופין ב־`.env` המקומי שאינו נכנס ל־Git.
 
 ## 4. שמירה על Read-Only — שלוש שכבות
 
 1. **IBKR עצמה**: "Read-Only API" ב־Gateway ⇒ כל ניסיון לשלוח הוראה נdenied ברמת ה־Gateway.
-2. **הספרייה**: `IB.connect(..., readonly=True)` — הקליינט מסרב לפעולות כתיבה.
-3. **הקוד שלנו**: לא קיימים endpoints או פונקציות של placeOrder/cancelOrder בכלל. ה־Audit Log מתעד כל אינטראקציה עם IBKR.
+2. **מצב החיבור באפליקציה**: `IB.connect(..., readonly=True)` מצמצם את פעולות ה־startup, אך אינו מוכיח לבדו שה־Gateway חוסם הוראות. לכן ה־UI מציג אותו כ־`APP READ-ONLY`, לא כאישור broker-side.
+3. **הקוד שלנו**: לא קיימים endpoints או פונקציות של placeOrder/cancelOrder
+   בכלל. אירועי חיבור ושגיאות נרשמים בלוג תפעולי ממוסך.
 
-Flex ו־MCP הם קריאה־בלבד מטבעם.
+Flex הוא שירות דוחות לקריאה בלבד מטבעו.
 
 ## 5. ניהול חיבור ו־Reconnect
 
@@ -57,12 +59,12 @@ Flex ו־MCP הם קריאה־בלבד מטבעם.
 - Reconnect עם **exponential backoff**: 5s → 10s → 20s → 40s → 80s → תקרה 5 דקות, בלי לולאה אינסופית צפופה. כפתור Manual Reconnect ב־UI.
 - בניתוק: הנתונים האחרונים נשארים על המסך, מסומנים `STALE` עם זמן העדכון האחרון. שום דבר לא מתאפס.
 - ה־Gateway מבצע ניתוק תחזוקה יומי מתוזמן (מוגדר בהגדרותיו) — המערכת מזהה חלון זה ולא מציפה שגיאות.
-- כל אירוע חיבור נכתב ללוג המובנה ולטבלת האירועים.
+- אירועי חיבור נכתבים ללוג המובנה הממוסך.
 
 ## 6. Rate Limits והתנהגות אדיבה
 
 - Gateway: מנויי שוק חיים הם משאב מוגבל (ברירת מחדל ~100 טיקרים בו־זמנית) — אנו רושמים מנוי רק לפוזיציות פתוחות + benchmarks.
-- Flex: בקשה אחת לשנייה לכל היותר; סנכרון מלא מתוזמן פעם ביום (ולפי דרישה ידנית), עם retry מבוקר על השגיאות הזמניות המוכרות של Flex (קודי "Statement generation in progress").
+- Flex: בקשה אחת לשנייה ולכל היותר 10 בדקה לכל Token. כל ריצה שולחת `SendRequest` יחיד; לאחר קבלת ReferenceCode היא בודקת את אותו דוח כל 10 שניות. התזמון היומי כבוי כברירת מחדל ומופעל רק אחרי סנכרון ידני מבוקר שהצליח.
 - אין שמירת Tick Data — snapshots תוך־יומיים במרווח מוגדר בלבד.
 
 ## 7. נתוני שוק (מחירים)

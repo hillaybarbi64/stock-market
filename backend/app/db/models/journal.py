@@ -26,10 +26,17 @@ class TradeCycle(Base):
     original automatic matching is always preserved in original_matching."""
 
     __tablename__ = "trade_cycles"
-    __table_args__ = (UniqueConstraint("conid", "open_time", name="uq_cycle_conid_open"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "conid",
+            "open_exec_id",
+            name="uq_cycle_conid_open_exec",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     conid: Mapped[int] = mapped_column(ForeignKey("instruments.conid"), index=True)
+    open_exec_id: Mapped[str] = mapped_column(String(64))
     direction: Mapped[str] = mapped_column(String(8))  # LONG | SHORT
     open_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     close_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # null = open
@@ -50,7 +57,9 @@ class CycleExecution(Base):
     __table_args__ = (UniqueConstraint("cycle_id", "exec_id", name="uq_cycle_exec"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    cycle_id: Mapped[int] = mapped_column(ForeignKey("trade_cycles.id", ondelete="CASCADE"), index=True)
+    cycle_id: Mapped[int] = mapped_column(
+        ForeignKey("trade_cycles.id", ondelete="CASCADE"), index=True
+    )
     exec_id: Mapped[str] = mapped_column(ForeignKey("executions.exec_id"), index=True)
     allocated_quantity: Mapped[Decimal] = mapped_column(Numeric(20, 6))
 
@@ -112,9 +121,7 @@ class EntityTag(Base):
     """Polymorphic tag attachment: entity_type in (cycle, execution, journal_entry)."""
 
     __tablename__ = "entity_tags"
-    __table_args__ = (
-        UniqueConstraint("tag_id", "entity_type", "entity_id", name="uq_tag_entity"),
-    )
+    __table_args__ = (UniqueConstraint("tag_id", "entity_type", "entity_id", name="uq_tag_entity"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     tag_id: Mapped[int] = mapped_column(ForeignKey("tags.id", ondelete="CASCADE"), index=True)

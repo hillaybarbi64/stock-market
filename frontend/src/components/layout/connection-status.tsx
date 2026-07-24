@@ -5,14 +5,14 @@ import { fetchConnection, postReconnect, type GatewayState } from "@/lib/api";
 
 /*
   The always-visible connection strip.
-  Connected:      ● LIVE · READ ONLY · CONNECTED        (+ delayed marker if relevant)
+  Connected:      ● LIVE · APP READ-ONLY                (+ delayed marker if relevant)
   Disconnected:   ● GATEWAY DOWN · retry in Ns          (+ manual reconnect button)
   Data is never presented as fresh when it isn't — the strip shows the last
   update time whenever the connection is anything but CONNECTED.
 */
 
 const STATE_LABEL: Record<GatewayState, string> = {
-  connected: "LIVE · READ-ONLY",
+  connected: "LIVE · APP READ-ONLY",
   connecting: "CONNECTING…",
   disconnected: "DISCONNECTED",
   gateway_down: "GATEWAY DOWN",

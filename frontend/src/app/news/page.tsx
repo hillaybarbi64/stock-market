@@ -63,7 +63,13 @@ export default function NewsPage() {
         <Panel title="מרכז החדשות" subtitle="Market News">
           <div className="py-8 text-center">
             <p className="t-h2">מרכז החדשות אינו מוגדר</p>
-            <p className="mx-auto mt-2 max-w-md text-[12.5px] leading-relaxed text-muted">{data.reason}</p>
+            <p className="mx-auto mt-2 max-w-md text-[12.5px] leading-relaxed text-muted">
+              {data.reason}
+            </p>
+            <p className="mx-auto mt-2 max-w-lg text-[11.5px] leading-relaxed text-faint">
+              הפעלת Finnhub שולחת אליו את סמלי שמונה ההחזקות הגדולות וטווח
+              התאריכים לצורך חיפוש חדשות. כמויות, שווי, עסקאות ומספר חשבון אינם נשלחים.
+            </p>
             <a
               href="https://finnhub.io/register"
               target="_blank"
@@ -116,7 +122,10 @@ export default function NewsPage() {
               </div>
             </a>
           ))}
-          <p className="t-help pt-1 text-center">מקור: Finnhub · לחיצה על כתבה פותחת את המקור בלשונית חדשה.</p>
+          <p className="t-help pt-1 text-center">
+            מקור: Finnhub · סמלי החזקות נשלחים לספק לצורך החיפוש · לחיצה פותחת את המקור
+            בלשונית חדשה.
+          </p>
         </div>
       )}
     </div>

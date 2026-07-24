@@ -4,7 +4,9 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from app.ibkr.flex_parser import parse_flex_report
+import pytest
+
+from app.ibkr.flex_parser import MultipleFlexAccountsError, parse_flex_report
 
 FIXTURE = (Path(__file__).parent / "fixtures" / "activity_flex_sample.xml").read_text()
 
@@ -63,3 +65,34 @@ def test_malformed_rows_are_skipped_not_fatal():
     # one Trade lost its conid → skipped and counted; everything else parses
     assert report.skipped.get("Trade") == 1
     assert len(report.trades) == 2
+
+
+def test_multiple_accounts_are_rejected_before_any_ingestion():
+    second_statement = (
+        '<FlexStatement accountId="U9999999" fromDate="20260701" toDate="20260713" />'
+    )
+    multi_account = FIXTURE.replace(
+        "</FlexStatements>",
+        f"{second_statement}</FlexStatements>",
+    )
+
+    with pytest.raises(MultipleFlexAccountsError):
+        parse_flex_report(multi_account)
+
+
+def test_record_from_another_account_is_rejected():
+    multi_account = FIXTURE.replace(
+        '<Trade accountId="U7654321"',
+        '<Trade accountId="U9999999"',
+        1,
+    )
+
+    with pytest.raises(MultipleFlexAccountsError):
+        parse_flex_report(multi_account)
+
+
+def test_statement_without_account_is_rejected():
+    missing_account = FIXTURE.replace(' accountId="U7654321"', "", 1)
+
+    with pytest.raises(MultipleFlexAccountsError):
+        parse_flex_report(missing_account)

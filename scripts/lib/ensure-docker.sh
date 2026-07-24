@@ -7,11 +7,70 @@
 #   source "$(dirname "$0")/lib/ensure-docker.sh"
 #   ensure_docker
 
+ensure_docker_cli() {
+  local candidate
+  if command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  for candidate in \
+    "$HOME/Applications/Docker.app/Contents/Resources/bin/docker" \
+    "/Applications/Docker.app/Contents/Resources/bin/docker"; do
+    if [[ -x "$candidate" ]]; then
+      export PATH="$(dirname "$candidate"):$PATH"
+      export DOCKER_CLI_PLUGIN_EXTRA_DIRS="$(dirname "$(dirname "$candidate")")/cli-plugins"
+      return 0
+    fi
+  done
+  return 1
+}
+
+select_compose_configuration() {
+  local install_mode=""
+
+  if [[ -n "${COMPOSE_FILE:-}" ]]; then
+    return 0
+  fi
+  if [[ ! -f .env ]]; then
+    return 0
+  fi
+
+  install_mode="$(
+    awk -F= '$1 == "DASHBOARD_INSTALL_MODE" {
+      print substr($0, index($0, "=") + 1)
+      exit
+    }' .env
+  )"
+  install_mode="${install_mode%$'\r'}"
+
+  case "${install_mode}" in
+    release)
+      export COMPOSE_FILE="$PWD/docker-compose.release.yml"
+      ;;
+    development)
+      ;;
+    "")
+      # Compatibility with release installations created before the explicit marker.
+      if grep -q '^GHCR_OWNER=' .env; then
+        export COMPOSE_FILE="$PWD/docker-compose.release.yml"
+      fi
+      ;;
+    *)
+      echo "ERROR: DASHBOARD_INSTALL_MODE must be 'development' or 'release'." >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
 ensure_docker() {
   local wait_s="${DOCKER_WAIT_SECONDS:-180}"
   local i
 
-  if ! command -v docker >/dev/null 2>&1; then
+  if ! select_compose_configuration; then
+    return 1
+  fi
+
+  if ! ensure_docker_cli; then
     cat >&2 <<'EOF'
 ERROR: Docker CLI not found.
 
@@ -31,7 +90,10 @@ EOF
   if [[ "$(uname -s)" == "Darwin" ]]; then
     if [[ -d "/Applications/Docker.app" ]] || [[ -d "$HOME/Applications/Docker.app" ]]; then
       echo "    Launching Docker Desktop…"
-      open -a Docker 2>/dev/null || true
+      open "$HOME/Applications/Docker.app" 2>/dev/null \
+        || open "/Applications/Docker.app" 2>/dev/null \
+        || open -a Docker 2>/dev/null \
+        || true
       # Also nudge via open URL scheme used by newer Desktop builds.
       open "docker://" 2>/dev/null || true
     else
@@ -76,9 +138,14 @@ ensure_env_file() {
     return 0
   fi
   echo "==> Creating .env from .env.example (random DB password)"
-  local pass
+  local pass app_key
   pass="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 || true)"
-  sed "s/CHANGE_ME/${pass}/g" .env.example > .env
+  app_key="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 || true)"
+  sed \
+    -e "s/CHANGE_ME_APP/${app_key}/g" \
+    -e "s/CHANGE_ME/${pass}/g" \
+    .env.example > .env
+  chmod 600 .env
   echo "    Created .env — fill IBKR_FLEX_TOKEN + IBKR_FLEX_QUERY_ID when you want history sync"
 }
 
@@ -112,63 +179,30 @@ port_in_use() {
   return 1
 }
 
-# Kill host listeners on a TCP port (macOS/Linux). Used for stale uvicorn/next/docker-proxy.
-kill_port_listeners() {
-  local port="$1"
-  local pids=""
-  if ! command -v lsof >/dev/null 2>&1; then
-    return 0
-  fi
-  pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u || true)"
-  if [[ -z "$pids" ]]; then
-    return 0
-  fi
-  echo "    freeing :$port (PIDs: $(echo "$pids" | tr '\n' ' '))"
-  # TERM first, then KILL stragglers.
-  # shellcheck disable=SC2086
-  kill $pids 2>/dev/null || true
-  sleep 1
-  pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u || true)"
-  if [[ -n "$pids" ]]; then
-    # shellcheck disable=SC2086
-    kill -9 $pids 2>/dev/null || true
-    sleep 1
-  fi
-}
-
-# Release ports this stack needs before compose up.
-# Stops OUR compose project only, then clears leftover listeners on :3000/:8000.
-# Port 5432 is only cleared if still busy after compose down (avoids killing
-# unrelated local Postgres when not necessary).
+# Release ports owned by this Compose project and refuse to kill unrelated apps.
 free_app_ports() {
-  echo "==> Freeing ports for this stack"
+  local ports="3000 8000 5432"
+  if [[ "${COMPOSE_FILE:-}" == *"docker-compose.release.yml"* ]]; then
+    ports="3000 8000"
+  fi
+  echo "==> Checking ports for this stack (${ports// /, })"
   docker compose down --remove-orphans >/dev/null 2>&1 || true
 
   local port
-  for port in 3000 8000; do
+  local busy=0
+  for port in $ports; do
     if port_in_use "$port"; then
-      kill_port_listeners "$port"
+      echo "    ERROR: :$port is used by a process outside this Compose stack" >&2
+      if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sed 's/^/      /' >&2 || true
+      fi
+      busy=1
     else
       echo "    :$port free"
     fi
   done
-
-  if port_in_use 5432; then
-    # Only free 5432 when something is still bound after our compose down —
-    # usually a stale docker-proxy from a previous failed run.
-    echo "    :5432 still busy after compose down — clearing"
-    kill_port_listeners 5432
-  else
-    echo "    :5432 free"
+  if [[ $busy -ne 0 ]]; then
+    echo "Stop or reconfigure the listed process, then run the command again." >&2
   fi
-
-  for port in 3000 8000 5432; do
-    if port_in_use "$port"; then
-      echo "    WARNING: :$port still busy after cleanup" >&2
-      if command -v lsof >/dev/null 2>&1; then
-        lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sed 's/^/      /' >&2 || true
-      fi
-    fi
-  done
-  return 0
+  return "$busy"
 }

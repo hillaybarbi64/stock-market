@@ -14,6 +14,7 @@ export type IconName =
   | "file"
   | "doc"
   | "refresh"
+  | "link"
   | "sliders"
   | "news"
   | "pulse";
@@ -84,6 +85,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M12.6 6A5 5 0 0 0 4 4.4M3.4 3v3h3" />
       <path d="M3.4 10A5 5 0 0 0 12 11.6M12.6 13v-3h-3" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M6.7 9.3 9.3 6.7" />
+      <path d="M5.1 11.8 3.9 13a2.1 2.1 0 0 1-3-3l2.7-2.7a2.1 2.1 0 0 1 3 0" />
+      <path d="m10.9 4.2 1.2-1.2a2.1 2.1 0 0 1 3 3l-2.7 2.7a2.1 2.1 0 0 1-3 0" />
     </>
   ),
   sliders: (

@@ -1,0 +1,232 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://ibkr:ibkr@127.0.0.1:5432/ibkr_dashboard_test
+      DATABASE_URL: postgresql+asyncpg://ibkr:ibkr@127.0.0.1:5432/ibkr_dashboard_test
+      IBKR_FLEX_TOKEN: ""
+      IBKR_FLEX_QUERY_ID: ""
+      IBKR_FLEX_AUTOSYNC: "false"
+      IBKR_GATEWAY_AUTOSTART: "false"
+      FINNHUB_API_KEY: ""
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ibkr
+          POSTGRES_PASSWORD: ibkr
+          POSTGRES_DB: ibkr_dashboard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ibkr -d ibkr_dashboard_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check app tests
+
+      - name: Apply migrations to an empty database
+        run: uv run alembic upgrade head
+
+      - name: Test
+        run: uv run pytest
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Enable the pinned pnpm version
+        run: corepack enable pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  containers:
+    name: Build ${{ matrix.component }} container
+    needs:
+      - backend
+      - frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - backend
+          - frontend
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Verify container build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./${{ matrix.component }}
+          file: ./${{ matrix.component }}/Dockerfile
+          push: false
+          cache-from: type=gha,scope=ci-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=ci-${{ matrix.component }}
+
+  compose-smoke:
+    name: Release-shaped runtime smoke
+    needs:
+      - backend
+      - frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE_FILE: docker-compose.release.yml
+      GHCR_OWNER: hillaybarbi64
+      DASHBOARD_IMAGE_TAG: 0.1.0
+      POSTGRES_USER: ibkr
+      POSTGRES_PASSWORD: ci-postgres-password-123456
+      POSTGRES_DB: ibkr_dashboard
+      APP_SECRET_KEY: ci-local-app-secret-key-123456
+      IBKR_GATEWAY_AUTOSTART: "false"
+      IBKR_FLEX_AUTOSYNC: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Create non-secret smoke configuration
+        run: |
+          cp config/release.env.example .env
+          sed -i 's/CHANGE_ME_APP/ci-local-app-secret-key-123456/g' .env
+          sed -i 's/CHANGE_ME/ci-postgres-password-123456/g' .env
+
+      - name: Validate development and release Compose
+        run: |
+          bash -n scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh
+          bash scripts/tests/test-data-operation-lock.sh
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.release.yml config --quiet
+          env -u COMPOSE_FILE bash -c '
+            source scripts/lib/ensure-docker.sh
+            select_compose_configuration
+            test "${COMPOSE_FILE}" = "${PWD}/docker-compose.release.yml"
+          '
+
+      - name: Seed legacy root-owned application data
+        run: |
+          docker build \
+            -t "ghcr.io/${GHCR_OWNER}/ibkr-dashboard-backend:${DASHBOARD_IMAGE_TAG}" \
+            ./backend
+          docker build \
+            -t "ghcr.io/${GHCR_OWNER}/ibkr-dashboard-frontend:${DASHBOARD_IMAGE_TAG}" \
+            ./frontend
+          docker compose run --rm --no-deps --user 0:0 appdata-init \
+            sh -c 'touch /app/data/root-owned-ci && chown 0:0 /app/data/root-owned-ci'
+
+      - name: Start and verify the local appliance
+        run: docker compose up -d --wait
+
+      - name: Verify health, non-root users, and application-data repair
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8000/api/system/health
+          curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null
+          test "$(docker compose exec -T backend id -u)" = "10001"
+          test "$(docker compose exec -T frontend id -u)" != "0"
+          test "$(docker compose exec -T backend stat -c '%u' /app/data/root-owned-ci)" = "10001"
+          docker compose exec -T backend sh -c \
+            'rm /app/data/root-owned-ci && touch /app/data/backend-write-ci && rm /app/data/backend-write-ci'
+
+      - name: Verify backup and restore round trip
+        run: |
+          backup_dir="${RUNNER_TEMP}/ibkr-dashboard-backups"
+          mkdir -p "${backup_dir}"
+          docker compose exec -T db psql -v ON_ERROR_STOP=1 -U ibkr -d ibkr_dashboard \
+            -c "CREATE TABLE ci_restore_sentinel (value text NOT NULL);" \
+            -c "INSERT INTO ci_restore_sentinel VALUES ('before-backup');"
+          docker compose exec -T backend sh -c \
+            "printf '%s' 'before-backup' > /app/data/ci-restore-attachment.txt"
+          BACKUP_DIR="${backup_dir}" ./scripts/backup.sh
+          restore_dump="$(find "${backup_dir}" -maxdepth 1 -name 'db_*.sql.gz' -print | sort | tail -n 1)"
+          restore_attachments="$(
+            find "${backup_dir}" -maxdepth 1 -type d -name 'data_*' -print | sort | tail -n 1
+          )"
+          test -n "${restore_dump}"
+          test -n "${restore_attachments}"
+          docker compose exec -T db psql -v ON_ERROR_STOP=1 -U ibkr -d ibkr_dashboard \
+            -c "UPDATE ci_restore_sentinel SET value = 'after-backup';"
+          docker compose exec -T backend sh -c \
+            "printf '%s' 'after-backup' > /app/data/ci-restore-attachment.txt"
+          printf 'restore\n' \
+            | BACKUP_DIR="${backup_dir}" ./scripts/restore.sh \
+              "${restore_dump}" "${restore_attachments}"
+          restored_value="$(
+            docker compose exec -T db psql -At -U ibkr -d ibkr_dashboard \
+              -c "SELECT value FROM ci_restore_sentinel;"
+          )"
+          test "${restored_value}" = "before-backup"
+          test "$(
+            docker compose exec -T backend cat /app/data/ci-restore-attachment.txt
+          )" = "before-backup"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+
+      - name: Remove smoke volumes
+        if: always()
+        run: docker compose down -v --remove-orphans

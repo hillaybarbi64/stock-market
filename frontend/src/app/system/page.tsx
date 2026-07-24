@@ -31,7 +31,7 @@ export default function SystemPage() {
             <Item label="מצב" value={<span className="sym">{c.state.toUpperCase()}</span>} />
             <Item
               label="הרשאה"
-              value={c.readonly ? "Read-Only (קריאה בלבד)" : "—"}
+              value={c.readonly ? "App Read-Only · יש לאמת גם ב־Gateway" : "—"}
             />
             <Item
               label="חשבון"

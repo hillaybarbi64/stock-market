@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 
 # shellcheck source=lib/ensure-docker.sh
 source "$(dirname "$0")/lib/ensure-docker.sh"
+ensure_docker_cli || true
 
 ok()   { printf '  ✅ %s\n' "$*"; }
 warn() { printf '  ⚠️  %s\n' "$*"; }
@@ -32,8 +33,8 @@ else
 fi
 
 echo ""
-echo "==> Ports (expect listeners after ./scripts/start.sh)"
-for port in 3000 8000 5432; do
+echo "==> App ports (the database is intentionally not exposed in release mode)"
+for port in 3000 8000; do
   if have lsof && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     ok "port $port is listening"
   elif have nc && nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
@@ -43,12 +44,20 @@ for port in 3000 8000 5432; do
   fi
 done
 
+gateway_port="$(
+  awk -F= '$1 == "IBKR_GATEWAY_PORT" { print substr($0, index($0, "=") + 1); exit }' .env 2>/dev/null
+)"
+gateway_port="${gateway_port:-4001}"
+gateway_mode="Live"
+if [[ "$gateway_port" == "4002" || "$gateway_port" == "7497" ]]; then
+  gateway_mode="Paper"
+fi
 echo ""
-echo "==> IB Gateway (live read-only API on 4001)"
-if have nc && nc -z 127.0.0.1 4001 >/dev/null 2>&1; then
-  ok "something is listening on 127.0.0.1:4001"
+echo "==> IB Gateway (${gateway_mode} read-only API on ${gateway_port})"
+if have nc && nc -z 127.0.0.1 "$gateway_port" >/dev/null 2>&1; then
+  ok "something is listening on 127.0.0.1:${gateway_port}"
 else
-  bad "nothing on 127.0.0.1:4001 — open IB Gateway, login Live, enable Read-Only API"
+  bad "nothing on 127.0.0.1:${gateway_port} — open IB Gateway, login ${gateway_mode}, enable Read-Only API"
 fi
 
 echo ""
@@ -72,4 +81,4 @@ fi
 
 echo ""
 echo "Done. If Docker was down: open Docker Desktop, then ./scripts/start.sh"
-echo "If Gateway is down: login in IB Gateway (Read-Only API, port 4001)."
+echo "If Gateway is down: login in IB Gateway (Read-Only API, port ${gateway_port})."

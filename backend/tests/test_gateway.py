@@ -6,13 +6,27 @@ from decimal import Decimal
 import pytest
 from ib_async.objects import AccountValue
 
+from app.api.system import (
+    AccountBindingConfirmationBody,
+    confirm_pending_account_binding,
+)
 from app.core.config import Settings
-from app.ibkr.gateway import GatewaySupervisor, ReadOnlyViolation, mask_account
+from app.ibkr.gateway import (
+    GatewaySupervisor,
+    MultipleGatewayAccountsError,
+    ReadOnlyViolation,
+    mask_account,
+)
 from app.ibkr.types import (
     AccountSummaryData,
     CashBalanceData,
     ConnectionInfo,
     GatewayState,
+)
+from app.services import registry
+from app.services.account_binding import (
+    AccountBindingConfirmationRequiredError,
+    AccountBindingMismatchError,
 )
 from tests.fakes import FakeIB
 
@@ -52,6 +66,164 @@ def test_readonly_false_is_refused():
 def test_mask_account():
     assert mask_account("U7654321") == "U***321"
     assert mask_account("U1") == "***"
+
+
+async def test_multiple_managed_accounts_are_refused_before_ingestion():
+    listener = RecordingListener()
+    sup = GatewaySupervisor(
+        make_settings(),
+        listener,
+        ib_factory=lambda: FakeIB(accounts=["U1111111", "U2222222"]),
+    )
+
+    with pytest.raises(MultipleGatewayAccountsError):
+        await sup._connect()
+
+    await sup.stop()
+
+
+async def test_missing_managed_account_is_refused_before_ingestion():
+    listener = RecordingListener()
+    sup = GatewaySupervisor(
+        make_settings(),
+        listener,
+        ib_factory=lambda: FakeIB(accounts=[]),
+    )
+
+    with pytest.raises(MultipleGatewayAccountsError):
+        await sup._connect()
+
+    await sup.stop()
+
+
+async def test_pending_account_is_exposed_when_binding_needs_confirmation():
+    listener = RecordingListener()
+
+    async def require_confirmation(_account_id: str) -> None:
+        raise AccountBindingConfirmationRequiredError("confirm legacy data")
+
+    sup = GatewaySupervisor(
+        make_settings(),
+        listener,
+        ib_factory=lambda: FakeIB(accounts=["U7654321"]),
+        account_guard=require_confirmation,
+    )
+
+    with pytest.raises(AccountBindingConfirmationRequiredError):
+        await sup._connect()
+
+    assert sup.pending_account_id == "U7654321"
+    assert sup.binding_confirmation_required is True
+    assert sup.binding_confirmation_id
+    assert sup.pending_account_for_confirmation("wrong-id") == ""
+    assert sup.pending_account_for_confirmation(sup.binding_confirmation_id) == "U7654321"
+    assert sup.account_id == ""
+    assert sup.info.account_id_masked == "U***321"
+    await sup.stop()
+
+
+async def test_confirmation_id_never_resolves_to_a_retried_different_account():
+    listener = RecordingListener()
+    fake = FakeIB(accounts=["U1111111"])
+
+    async def require_confirmation(_account_id: str) -> None:
+        raise AccountBindingConfirmationRequiredError("confirm legacy data")
+
+    sup = GatewaySupervisor(
+        make_settings(),
+        listener,
+        ib_factory=lambda: fake,
+        account_guard=require_confirmation,
+    )
+
+    with pytest.raises(AccountBindingConfirmationRequiredError):
+        await sup._connect()
+    first_confirmation_id = sup.binding_confirmation_id
+
+    await sup._disconnect()
+    fake._accounts = ["U2222222"]
+    with pytest.raises(AccountBindingConfirmationRequiredError):
+        await sup._connect()
+
+    assert sup.pending_account_for_confirmation(first_confirmation_id) == ""
+    assert sup.pending_account_for_confirmation(sup.binding_confirmation_id) == "U2222222"
+    await sup.stop()
+
+
+async def test_rejected_account_never_relabels_existing_account_data():
+    listener = RecordingListener()
+    fake = FakeIB(accounts=["U1111111"])
+
+    async def allow_only_bound_account(account_id: str) -> None:
+        if account_id != "U1111111":
+            raise AccountBindingMismatchError("different account")
+
+    sup = GatewaySupervisor(
+        make_settings(),
+        listener,
+        ib_factory=lambda: fake,
+        account_guard=allow_only_bound_account,
+    )
+    await sup._connect()
+    assert sup.account_id == "U1111111"
+    assert sup.info.account_id_masked == "U***111"
+
+    await sup._disconnect()
+    fake._accounts = ["U2222222"]
+    with pytest.raises(AccountBindingMismatchError):
+        await sup._connect()
+
+    assert sup.account_id == "U1111111"
+    assert sup.info.account_id_masked == "U***111"
+    assert sup.pending_account_id == ""
+    assert sup.binding_confirmation_required is False
+    await sup.stop()
+
+
+async def test_confirmation_route_binds_snapshot_account_and_consumes_id(monkeypatch):
+    listener = RecordingListener()
+    confirmed_accounts: list[str] = []
+
+    async def require_confirmation(_account_id: str) -> None:
+        raise AccountBindingConfirmationRequiredError("confirm legacy data")
+
+    async def record_confirmation(account_id: str) -> None:
+        confirmed_accounts.append(account_id)
+
+    sup = GatewaySupervisor(
+        make_settings(),
+        listener,
+        ib_factory=lambda: FakeIB(accounts=["U7654321"]),
+        account_guard=require_confirmation,
+    )
+    with pytest.raises(AccountBindingConfirmationRequiredError):
+        await sup._connect()
+    confirmation_id = sup.binding_confirmation_id
+
+    previous_supervisor = registry.supervisor
+    registry.supervisor = sup
+    monkeypatch.setattr(
+        "app.services.account_binding.confirm_account_binding",
+        record_confirmation,
+    )
+    try:
+        result = await confirm_pending_account_binding(
+            AccountBindingConfirmationBody(confirmation_id=confirmation_id)
+        )
+        assert result["ok"] is True
+        assert confirmed_accounts == ["U7654321"]
+        assert sup.binding_confirmation_required is False
+        assert sup.binding_confirmation_id == ""
+        assert sup.pending_account_id == ""
+
+        replay = await confirm_pending_account_binding(
+            AccountBindingConfirmationBody(confirmation_id=confirmation_id)
+        )
+        assert replay["ok"] is False
+        assert confirmed_accounts == ["U7654321"]
+    finally:
+        registry.supervisor = previous_supervisor
+        await sup.stop()
 
 
 async def test_refused_connection_goes_gateway_down_and_schedules_retry():

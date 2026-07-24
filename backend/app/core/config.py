@@ -22,8 +22,11 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    allowed_hosts: list[str] = ["localhost", "127.0.0.1"]
 
     database_url: str = "postgresql+asyncpg://ibkr:ibkr@localhost:5432/ibkr_dashboard"
+    # Local at-rest encryption key for UI-saved broker tokens.
+    app_secret_key: str = ""
 
     # IB Gateway (live, read-only). 4001 = live, 4002 = paper; this system targets live.
     ibkr_gateway_host: str = "127.0.0.1"
@@ -36,6 +39,8 @@ class Settings(BaseSettings):
     # Flex Web Service (historical, read-only by nature)
     ibkr_flex_token: str = ""  # secret — env only, masked in logs
     ibkr_flex_query_id: str = ""
+    # Safety hold: enable only after one controlled manual sync succeeds.
+    ibkr_flex_autosync: bool = False
 
     # Market news (optional). Free key from finnhub.io; empty → news disabled.
     finnhub_api_key: str = ""  # secret — env only

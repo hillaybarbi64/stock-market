@@ -1,6 +1,10 @@
 # IBKR Portfolio & Trading Journal
 
-מערכת אישית לניתוח תיק השקעות, יומן מסחר ודשבורד ביצועים, מחוברת בחיבור **Live · Read-Only** לחשבון Interactive Brokers אמיתי. רצה מקומית בלבד — הנתונים לא עוזבים את המחשב.
+מערכת אישית לניתוח תיק השקעות, יומן מסחר ודשבורד ביצועים, המחוברת לחשבון
+Interactive Brokers דרך IB Gateway ו־Flex. הקוד ו־container images מיועדים
+להפצה דרך GitHub; כל משתמש מריץ instance מבודד ומסד הנתונים נשאר אצלו.
+מודול החדשות הוא opt-in: אם מוגדר Finnhub, סמלי ההחזקות נשלחים אליו כדי
+להביא חדשות רלוונטיות.
 
 ## מסמכים
 
@@ -14,20 +18,43 @@
 | [docs/SECURITY.md](docs/SECURITY.md) | אבטחת מידע |
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | תוכנית העבודה וסטטוס |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | התקנה, הפעלה, גיבוי ופתרון תקלות |
+| [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | מסירת appliance מבודד דרך GitHub/GHCR |
+| [docs/CLOUD_ROADMAP.md](docs/CLOUD_ROADMAP.md) | הדרך מגרסה מקומית למוצר ענן מאובטח |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | העברת הפיתוח למפתח נוסף בלי למסור סודות |
 
 ## תמצית טכנית
 
 - **Backend**: Python 3.11, FastAPI, SQLAlchemy 2 (async), Alembic, `ib_async` (IB Gateway, readonly), Flex Web Service client, structlog.
 - **Frontend**: Next.js, React, TypeScript, Tailwind, TanStack Query/Table, ECharts. RTL מלא.
 - **DB**: PostgreSQL 16 (Docker, מקומי בלבד).
-- **חיבור IBKR**: IB Gateway (חי, Read-Only נאכף בצד IBKR) + Flex Web Service (היסטוריה מלאה).
+- **חיבור IBKR**: IB Gateway חי עם Read-Only API שמופעל ב־Gateway, קוד אפליקטיבי
+  ללא פעולות order, ו־Flex Web Service להיסטוריה מלאה.
+- **מודל הפצה נוכחי**: instance נפרד לכל משתמש; אין ערבוב חשבונות ואין SaaS משותף.
+- **בידוד חשבון**: החיבור הראשון קושר את מסד הנתונים לחשבון IBKR יחיד באמצעות
+  fingerprint בלתי־הפיך; חיבור לחשבון אחר נדחה. בשדרוג של מסד שכבר מכיל
+  נתונים, הקישור מחייב אישור מפורש של מספר החשבון הממוסך לפני קליטה נוספת.
 
 ## הפעלה מהירה
 
-ראו [docs/RUNBOOK.md](docs/RUNBOOK.md).
+למפתח: ראו [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
 הפעלה יומית (פקודה אחת): `./scripts/start.sh`  
 הסקריפט יוצר `.env` אם צריך, מפעיל Docker Desktop ב־macOS אם כבוי, מרים את כל השירותים, ממתין ל־health, ופותח את הדשבורד. לאבחון: `./scripts/doctor.sh`.
+
+למשתמש שמקבל release:
+
+```bash
+git clone https://github.com/hillaybarbi64/stock-market.git
+cd stock-market
+./scripts/install-release.sh
+```
+
+לאחר ההתקנה פותחים `http://localhost:3000/connect`. שם המשתמש, הסיסמה ו־2FA
+מוקלדים רק בתוך IB Gateway הרשמי — לעולם לא בדשבורד.
+
+> המערכת הנוכחית אינה שרת multi-tenant ואין לחשוף את הפורטים שלה לאינטרנט.
+> לפני הפצה מסחרית או הפצת נתוני שוק לצדדים שלישיים נדרש בירור ואישור מתאים
+> מול Interactive Brokers; ראו `docs/DISTRIBUTION.md`.
 
 ## סטטוס
 

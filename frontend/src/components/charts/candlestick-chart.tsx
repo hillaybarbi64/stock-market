@@ -34,11 +34,9 @@ function sma(values: number[], period: number): (number | null)[] {
 export function CandlestickChart({
   bars,
   height = 320,
-  currency = "USD",
 }: {
   bars: Bar[];
   height?: number;
-  currency?: string;
 }) {
   const option = useMemo<EChartsOption>(() => {
     const t = chartTokens();
@@ -166,7 +164,7 @@ export function CandlestickChart({
         },
       ],
     } as EChartsOption;
-  }, [bars, currency]);
+  }, [bars]);
 
   return <EChart option={option} height={height} />;
 }

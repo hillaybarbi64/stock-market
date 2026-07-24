@@ -17,6 +17,10 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 
+class MultipleFlexAccountsError(ValueError):
+    """A single-user appliance must never merge more than one account."""
+
+
 @dataclass(frozen=True)
 class FlexInstrument:
     conid: int
@@ -187,9 +191,22 @@ def parse_flex_report(xml: str) -> FlexReport:
     root = SafeET.fromstring(xml)
     report = FlexReport()
 
-    stmt = root.find(".//FlexStatement")
+    statements = list(root.iter("FlexStatement"))
+    if not statements or any(not _str(statement, "accountId") for statement in statements):
+        raise MultipleFlexAccountsError(
+            "Every Flex statement must be scoped to one explicit account"
+        )
+    account_ids = {
+        account_id for element in root.iter() if (account_id := _str(element, "accountId"))
+    }
+    if len(account_ids) != 1:
+        raise MultipleFlexAccountsError(
+            "Flex report must contain exactly one account; create a query scoped to one account"
+        )
+
+    stmt = statements[0] if statements else None
     if stmt is not None:
-        report.account_id = _str(stmt, "accountId")
+        report.account_id = next(iter(account_ids))
         report.from_date = _date(stmt, "fromDate")
         report.to_date = _date(stmt, "toDate")
         report.when_generated = _datetime(stmt, "whenGenerated")
